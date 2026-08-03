@@ -15,11 +15,9 @@ async def select_language(update: Update, context: ContextTypes.DEFAULT_TYPE,) -
 
     if query.data == "language_ru":
         language = "ru"
-        text = "Вы выбрали русский язык."
 
     elif query.data == "language_en":
         language = "en"
-        text = "You selected English."
 
     else:
         return
@@ -37,10 +35,11 @@ async def select_language(update: Update, context: ContextTypes.DEFAULT_TYPE,) -
             await query.edit_message_text("Для продолжения подключите аккаунт FatSecret.")
         elif language == "en":
             await query.edit_message_text("Connect your FatSecret account to continue.")
-        # показать экран подключения FatSecret
+        return
+    elif user.fatsecret_token and user.fatsecret_token_secret:
+        await update.message.reply_text("Main menu.") 
         return
 
-    await query.edit_message_text(text)
 
 
     
