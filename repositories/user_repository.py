@@ -50,10 +50,24 @@ def update_language(telegram_id: int, language: str) -> None:
     finally:
         connection.close()
 
-# def save_fatsecret_credentials(
-#     telegram_id: int,
-#     token: str,
-#     token_secret: str,
-#     connected_at: str,
-# ) -> None:
-    
+def save_fatsecret_credentials(
+    telegram_id: int,
+    token: str,
+    token_secret: str,
+    connected_at: str,
+) -> None:
+    connection = sqlite3.connect(DB_PATH)
+    try:
+        cursor = connection.execute(
+            """
+            UPDATE users
+            SET fatsecret_token = ?,
+                fatsecret_token_secret = ?,
+                fatsecret_connected_at = ?
+            WHERE telegram_id = ?
+            """,
+        (token, token_secret, connected_at, telegram_id),
+        )
+        connection.commit()
+    finally:
+        connection.close()

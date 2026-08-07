@@ -13,6 +13,7 @@ from database.init_db import init_db
 
 from handlers.start import start 
 from handlers.language import select_language
+from handlers.fatsecret_auth import start_fatsecret_auth
 
 load_dotenv()
 
@@ -28,6 +29,12 @@ def main() -> None:
         CallbackQueryHandler(
             select_language,
             pattern=r"^language_(ru|en)$",
+        )
+    )
+    app.add_handler(
+        CallbackQueryHandler(
+            start_fatsecret_auth,
+            pattern=r"^fatsecret_auth_start",
         )
     )
     app.run_polling()

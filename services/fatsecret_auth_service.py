@@ -5,8 +5,11 @@ load_dotenv()
 
 from clients.fatsecret_client import create_authorization
 
+FATSECRET_CONSUMER_KEY = os.getenv("FATSECRET_CONSUMER_KEY")
+FATSECRET_CONSUMER_SECRET = os.getenv("FATSECRET_CONSUMER_SECRET")
+
 def start_authorization() -> tuple[str, str, str]:
-    auth_data = create_authorization(os.getenv("FATSECRET_CONSUMER_KEY"), os.getenv("FATSECRET_CONSUMER_SECRET"))
+    auth_data = create_authorization(FATSECRET_CONSUMER_KEY, FATSECRET_CONSUMER_SECRET)
     return auth_data
 
 def complete_authorization(
@@ -16,5 +19,3 @@ def complete_authorization(
     verifier: str,
 ) -> None:
     ...
-
-print(start_authorization())

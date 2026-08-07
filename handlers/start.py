@@ -17,6 +17,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         ]
     ]
+
+    auth_button_ru = [
+        [
+            InlineKeyboardButton("Подключить FatSecret!", callback_data='fatsecret_auth_start')
+        ]
+    ]
+
+    auth_button_en = [
+            [
+                InlineKeyboardButton("Connect FatSecret!", callback_data='fatsecret_auth_start')
+            ]
+        ]
     
     if user is None:
         create_user(telegram_id)
@@ -34,9 +46,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     if not user.fatsecret_token or not user.fatsecret_token_secret:
         if user.language == "en":
-            await update.message.reply_text("Connect your FatSecret account to continue.") 
+            await update.message.reply_text("Connect your FatSecret account to continue.",
+            reply_markup=InlineKeyboardMarkup(auth_button_en)) 
         elif user.language == "ru":
-            await update.message.reply_text("Для продолжения подключите аккаунт FatSecret.")
+            await update.message.reply_text("Для продолжения подключите аккаунт FatSecret.",
+            reply_markup=InlineKeyboardMarkup(auth_button_ru))
         return
 
     await update.message.reply_text("Main menu") 
