@@ -49,4 +49,11 @@ def update_language(telegram_id: int, language: str) -> None:
         connection.commit()
     finally:
         connection.close()
+
+# def save_fatsecret_credentials(
+#     telegram_id: int,
+#     token: str,
+#     token_secret: str,
+#     connected_at: str,
+# ) -> None:
     
