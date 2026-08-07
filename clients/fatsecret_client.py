@@ -1,14 +1,9 @@
-import os
-from dotenv import load_dotenv
-
 from requests_oauthlib import OAuth1Session
 
 from oauthlib.oauth1 import (
     SIGNATURE_HMAC,
     SIGNATURE_TYPE_BODY,
 )
-
-load_dotenv()
 
 REQUEST_TOKEN_URL = (
     "https://authentication.fatsecret.com/oauth/request_token"
@@ -32,10 +27,5 @@ def create_authorization(consumer_key: str, consumer_secret: str) -> tuple[str, 
     
     authorization_url = oauth.authorization_url(AUTHORIZATION_URL)
 
-    print(bool(request_token))
-    print(bool(request_token_secret))
-    print(authorization_url)
-
     return authorization_url, request_token, request_token_secret
 
-create_authorization(os.getenv("FATSECRET_CONSUMER_KEY"), os.getenv("FATSECRET_CONSUMER_SECRET"))
