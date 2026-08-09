@@ -2,16 +2,19 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
     CommandHandler,
+    ConversationHandler,
     ContextTypes
 )
 
 from datetime import datetime, timezone
 
 from services.fatsecret_auth_service import start_authorization
+from services.fatsecret_auth_service import complete_authorization
 from repositories.user_repository import get_user, save_fatsecret_credentials
 
+IS_WAITING_VERIFIER = True
+
 async def start_fatsecret_auth(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    print("Вызвалось ")
     telegram_id = update.effective_user.id
     language = get_user(telegram_id).language
 
@@ -21,8 +24,6 @@ async def start_fatsecret_auth(update: Update, context: ContextTypes.DEFAULT_TYP
 
     context.user_data["request_token"] = auth_data[1]
     context.user_data["request_token_secret"] = auth_data[2]
-
-    save_fatsecret_credentials(telegram_id, auth_data[1], auth_data[2], datetime.now(timezone.utc).isoformat())
 
     keyboard_ru = [
         [
@@ -51,9 +52,57 @@ async def start_fatsecret_auth(update: Update, context: ContextTypes.DEFAULT_TYP
             'Подключите Ваш аккаунт FatSecret. Нажмите кнопку, авторизуйтесь и введите в чат полученный на сайте код.',
             reply_markup=InlineKeyboardMarkup(keyboard_ru)
         )
-    return
+
+    return IS_WAITING_VERIFIER
     
 
     
-
+async def process_fatsecret_verifier(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    telegram_id = update.effective_user.id
+    language = get_user(telegram_id).language
+    print("Запустился код проверки")
     
+    verifier = int(update.message.text.strip())
+    print("Отловил verifier! " +  verifier)
+
+    request_token = context.user_data.get("request_token")
+    request_token_secret = context.user_data.get("request_token_secret")
+
+    if language == "ru":
+        error_text = "Сессия устарела. Начните авторизацию заново." 
+        success_text="Аккаунт FatSecret успешно подключен!"
+        fail_text = "Ошибка авторизации: Неверный код. Попробуйте еще раз."
+    elif language == "en":
+        error_text = "Session expired. Please restart auth."
+        success_text = "FatSecret account successfully connected!"
+        fail_text = "Auth error: Invalid code. Try again."
+
+
+    if not request_token or not request_token_secret:
+        await update.message.reply_text(error_text)
+        return ConversationHandler.END
+
+    try: 
+        user_tokens = complete_authorization(telegram_id, request_token, request_token_secret, verifier)
+
+        save_fatsecret_credentials(
+            telegram_id, 
+            user_tokens.user_token, 
+            user_tokens.user_token_secret, 
+            datetime.now(timezone.utc).isoformat()
+        )
+
+        await update.message.reply_text(success_text)
+
+    except Exception as error:
+        print(error)
+        await update.message.reply_text(fail_text)
+        return IS_WAITING_VERIFIER
+
+    context.user_data.pop("request_token", None)
+    context.user_data.pop("request_token_secret", None)
+
+    return ConversationHandler.END
+
+
+        

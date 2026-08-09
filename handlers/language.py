@@ -13,6 +13,7 @@ async def select_language(update: Update, context: ContextTypes.DEFAULT_TYPE,) -
 
     await query.answer()
 
+
     if query.data == "language_ru":
         language = "ru"
 
@@ -21,6 +22,18 @@ async def select_language(update: Update, context: ContextTypes.DEFAULT_TYPE,) -
 
     else:
         return
+
+    auth_button_ru = [
+        [
+            InlineKeyboardButton("Подключить FatSecret!", callback_data='fatsecret_auth_start')
+        ]
+    ]
+
+    auth_button_en = [
+            [
+                InlineKeyboardButton("Connect FatSecret!", callback_data='fatsecret_auth_start')
+            ]
+        ]
 
     update_language(telegram_id, language)
 
@@ -31,10 +44,12 @@ async def select_language(update: Update, context: ContextTypes.DEFAULT_TYPE,) -
         return
 
     if not user.fatsecret_token or not user.fatsecret_token_secret:
-        if language == "ru":
-            await query.edit_message_text("Для продолжения подключите аккаунт FatSecret.")
-        elif language == "en":
-            await query.edit_message_text("Connect your FatSecret account to continue.")
+        if user.language == "en":
+            await query.edit_message_text("Connect your FatSecret account to continue.",
+            reply_markup=InlineKeyboardMarkup(auth_button_en)) 
+        elif user.language == "ru":
+            await query.edit_message_text("Для продолжения подключите аккаунт FatSecret.",
+            reply_markup=InlineKeyboardMarkup(auth_button_ru))
         return
     
     await query.edit_message_text("Main menu.") 

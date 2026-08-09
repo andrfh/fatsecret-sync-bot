@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from clients.fatsecret_client import create_authorization
+from clients.fatsecret_client import exchange_verifier
 
 FATSECRET_CONSUMER_KEY = os.getenv("FATSECRET_CONSUMER_KEY")
 FATSECRET_CONSUMER_SECRET = os.getenv("FATSECRET_CONSUMER_SECRET")
@@ -17,5 +18,12 @@ def complete_authorization(
     request_token: str,
     request_token_secret: str,
     verifier: str,
-) -> None:
-    ...
+) -> tuple[str, str]:
+    user_tokens = exchange_verifier(
+        FATSECRET_CONSUMER_KEY, 
+        FATSECRET_CONSUMER_SECRET, 
+        request_token, 
+        request_token_secret, 
+        verifier
+    )
+    return user_tokens
