@@ -6,21 +6,27 @@ from telegram.ext import (
     ContextTypes
 )
 
+import asyncio
+
 from datetime import datetime, timezone
 
 from services.fatsecret_auth_service import start_authorization
 from services.fatsecret_auth_service import complete_authorization
 from repositories.user_repository import get_user, save_fatsecret_credentials
 
-IS_WAITING_VERIFIER = True
+
+
+WAITING_VERIFIER = 1
 
 async def start_fatsecret_auth(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     telegram_id = update.effective_user.id
     language = get_user(telegram_id).language
-
     query = update.callback_query
-
-    auth_data = start_authorization()
+    await query.answer()
+    
+    auth_data = await asyncio.to_thread(
+        start_authorization
+    )
 
     context.user_data["request_token"] = auth_data[1]
     context.user_data["request_token_secret"] = auth_data[2]
@@ -53,7 +59,7 @@ async def start_fatsecret_auth(update: Update, context: ContextTypes.DEFAULT_TYP
             reply_markup=InlineKeyboardMarkup(keyboard_ru)
         )
 
-    return IS_WAITING_VERIFIER
+    return WAITING_VERIFIER
     
 
     
@@ -62,7 +68,7 @@ async def process_fatsecret_verifier(update: Update, context: ContextTypes.DEFAU
     language = get_user(telegram_id).language
     print("Запустился код проверки")
     
-    verifier = int(update.message.text.strip())
+    verifier = update.message.text.strip()
     print("Отловил verifier! " +  verifier)
 
     request_token = context.user_data.get("request_token")
@@ -83,12 +89,12 @@ async def process_fatsecret_verifier(update: Update, context: ContextTypes.DEFAU
         return ConversationHandler.END
 
     try: 
-        user_tokens = complete_authorization(telegram_id, request_token, request_token_secret, verifier)
+        user_token, user_token_secret = complete_authorization(telegram_id, request_token, request_token_secret, verifier)
 
         save_fatsecret_credentials(
             telegram_id, 
-            user_tokens.user_token, 
-            user_tokens.user_token_secret, 
+            user_token, 
+            user_token_secret, 
             datetime.now(timezone.utc).isoformat()
         )
 
@@ -97,7 +103,7 @@ async def process_fatsecret_verifier(update: Update, context: ContextTypes.DEFAU
     except Exception as error:
         print(error)
         await update.message.reply_text(fail_text)
-        return IS_WAITING_VERIFIER
+        return WAITING_VERIFIER
 
     context.user_data.pop("request_token", None)
     context.user_data.pop("request_token_secret", None)

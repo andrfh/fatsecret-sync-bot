@@ -6,7 +6,6 @@ from telegram.ext import (
     CallbackQueryHandler,
     Application,
     CommandHandler,
-    PicklePersistence,
     ConversationHandler,
     MessageHandler, 
     filters
@@ -19,7 +18,7 @@ from handlers.language import select_language
 from handlers.fatsecret_auth import (
     start_fatsecret_auth,
     process_fatsecret_verifier,
-    IS_WAITING_VERIFIER
+    WAITING_VERIFIER
 )
 
 load_dotenv()
@@ -31,8 +30,11 @@ fatsecret_auth_conv = ConversationHandler(
         CallbackQueryHandler(start_fatsecret_auth, pattern=r"^fatsecret_auth_start$")
     ],
     states={
-        IS_WAITING_VERIFIER: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, process_fatsecret_verifier)
+        WAITING_VERIFIER: [
+            MessageHandler(
+                filters.TEXT & ~filters.COMMAND,
+                process_fatsecret_verifier,
+            )
         ]
     },
     fallbacks=[
@@ -44,21 +46,13 @@ fatsecret_auth_conv = ConversationHandler(
 def main() -> None:
     init_db()
 
-    my_persistence = PicklePersistence(filepath="bot_data.pickle")
-
-    app = Application.builder().token(telegram_api_key).persistence(my_persistence) .build()
+    app = Application.builder().token(telegram_api_key).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(
         CallbackQueryHandler(
             select_language,
             pattern=r"^language_(ru|en)$",
-        )
-    )
-    app.add_handler(
-        CallbackQueryHandler(
-            start_fatsecret_auth,
-            pattern=r"^fatsecret_auth_start$",
         )
     )
 

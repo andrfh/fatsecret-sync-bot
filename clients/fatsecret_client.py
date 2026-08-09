@@ -3,7 +3,9 @@ from requests_oauthlib import OAuth1Session
 from oauthlib.oauth1 import (
     SIGNATURE_HMAC,
     SIGNATURE_TYPE_BODY,
+    SIGNATURE_TYPE_QUERY
 )
+from urllib.parse import parse_qs
 
 REQUEST_TOKEN_URL = (
     "https://authentication.fatsecret.com/oauth/request_token"
@@ -29,22 +31,24 @@ def create_authorization(consumer_key: str, consumer_secret: str) -> tuple[str, 
 
     return authorization_url, request_token, request_token_secret
 
-def exchange_verifier(consumer_key: str, consumer_secret: str, access_token: str, token_secret: str, verifier: int) -> tuple[str, str]:
+def exchange_verifier(consumer_key: str, consumer_secret: str, request_token: str, request_token_secret: str, verifier: str) -> tuple[str, str]:
     oauth = OAuth1Session(
-        consumer_key, 
-        client_secret=consumer_secret, 
-        resource_owner_key = access_token,
-        resource_owner_secret = token_secret,
-        verifier = verifier,
-        callback_uri="oob", 
-        signature_method=SIGNATURE_HMAC, 
-        signature_type=SIGNATURE_TYPE_BODY
+        consumer_key,
+        client_secret=consumer_secret,
+        resource_owner_key=request_token,
+        resource_owner_secret=request_token_secret,
+        verifier=verifier,
+        signature_method=SIGNATURE_HMAC,
+        signature_type=SIGNATURE_TYPE_QUERY,
     )
 
-    user_tokens = oauth.fetch_access_token(ACCESS_TOKEN_URL)
+    response = oauth.get(ACCESS_TOKEN_URL)
+    response.raise_for_status()
 
-    user_token = user_tokens["oauth_token"]
-    user_token_secret = user_tokens["oauth_token_secret"]
+    data = parse_qs(response.text)
+
+    user_token = data["oauth_token"][0]
+    user_token_secret = data["oauth_token_secret"][0]
 
     return user_token, user_token_secret
 

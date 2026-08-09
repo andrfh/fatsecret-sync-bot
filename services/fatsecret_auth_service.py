@@ -19,11 +19,11 @@ def complete_authorization(
     request_token_secret: str,
     verifier: str,
 ) -> tuple[str, str]:
-    user_tokens = exchange_verifier(
+    user_token, user_token_secret = exchange_verifier(
         FATSECRET_CONSUMER_KEY, 
         FATSECRET_CONSUMER_SECRET, 
         request_token, 
         request_token_secret, 
         verifier
     )
-    return user_tokens
+    return user_token, user_token_secret
