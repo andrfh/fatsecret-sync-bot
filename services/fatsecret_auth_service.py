@@ -37,4 +37,3 @@ def complete_authorization(
         user_token_secret, 
         datetime.now(timezone.utc).isoformat()
     )
-    return 

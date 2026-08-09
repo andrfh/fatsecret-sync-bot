@@ -6,8 +6,6 @@ from telegram.ext import (
 
 import asyncio
 
-from datetime import datetime, timezone
-
 from services.fatsecret_auth_service import start_authorization
 from services.fatsecret_auth_service import complete_authorization
 from repositories.user_repository import get_user
@@ -21,9 +19,18 @@ async def start_fatsecret_auth(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
 
-    auth_data = await asyncio.to_thread(
-        start_authorization
-    )
+    try:
+        auth_data = await asyncio.to_thread(
+            start_authorization
+        )
+
+    except Exception as error:
+        print(f"FatSecret get auth data failed: {type(error).__name__}")
+        if language == 'ru':
+            await query.edit_message_text('Что-то пошло не так. Пожалуйста, попробуйте позднее.')
+        elif language == 'en':
+            await query.edit_message_text('Something went wrong. Please, try again later.')
+        return ConversationHandler.END
 
     context.user_data["request_token"] = auth_data[1]
     context.user_data["request_token_secret"] = auth_data[2]
