@@ -3,8 +3,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from datetime import datetime, timezone
+
 from clients.fatsecret_client import create_authorization
 from clients.fatsecret_client import exchange_verifier
+
+from repositories.user_repository import save_fatsecret_credentials
 
 FATSECRET_CONSUMER_KEY = os.getenv("FATSECRET_CONSUMER_KEY")
 FATSECRET_CONSUMER_SECRET = os.getenv("FATSECRET_CONSUMER_SECRET")
@@ -18,7 +22,7 @@ def complete_authorization(
     request_token: str,
     request_token_secret: str,
     verifier: str,
-) -> tuple[str, str]:
+) -> None:
     user_token, user_token_secret = exchange_verifier(
         FATSECRET_CONSUMER_KEY, 
         FATSECRET_CONSUMER_SECRET, 
@@ -26,4 +30,11 @@ def complete_authorization(
         request_token_secret, 
         verifier
     )
-    return user_token, user_token_secret
+
+    save_fatsecret_credentials(
+        telegram_id, 
+        user_token, 
+        user_token_secret, 
+        datetime.now(timezone.utc).isoformat()
+    )
+    return 

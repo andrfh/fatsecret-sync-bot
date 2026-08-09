@@ -10,8 +10,7 @@ from datetime import datetime, timezone
 
 from services.fatsecret_auth_service import start_authorization
 from services.fatsecret_auth_service import complete_authorization
-from repositories.user_repository import get_user, save_fatsecret_credentials
-
+from repositories.user_repository import get_user
 
 
 WAITING_VERIFIER = 1
@@ -84,19 +83,12 @@ async def process_fatsecret_verifier(update: Update, context: ContextTypes.DEFAU
         return ConversationHandler.END
 
     try: 
-        user_token, user_token_secret = await asyncio.to_thread(
+        await asyncio.to_thread(
             complete_authorization,
             telegram_id,
             request_token,
             request_token_secret,
             verifier,
-        )
-
-        save_fatsecret_credentials(
-            telegram_id, 
-            user_token, 
-            user_token_secret, 
-            datetime.now(timezone.utc).isoformat()
         )
 
         await update.message.reply_text(success_text)
@@ -111,5 +103,12 @@ async def process_fatsecret_verifier(update: Update, context: ContextTypes.DEFAU
 
     return ConversationHandler.END
 
-
+async def cancel_fatsecret_auth(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
+    context.user_data.pop("request_token", None)
+    context.user_data.pop("request_token_secret", None)
+    
+    return ConversationHandler.END
         

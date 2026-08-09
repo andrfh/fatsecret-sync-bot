@@ -18,6 +18,7 @@ from handlers.language import select_language
 from handlers.fatsecret_auth import (
     start_fatsecret_auth,
     process_fatsecret_verifier,
+    cancel_fatsecret_auth,
     WAITING_VERIFIER
 )
 
@@ -38,7 +39,7 @@ fatsecret_auth_conv = ConversationHandler(
         ]
     },
     fallbacks=[
-        CommandHandler("cancel", lambda u, c: ConversationHandler.END) 
+        CommandHandler("cancel", cancel_fatsecret_auth)
     ],
     name="fatsecret_auth_conversation"
 )
