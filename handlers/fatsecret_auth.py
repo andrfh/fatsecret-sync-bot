@@ -94,7 +94,7 @@ async def process_fatsecret_verifier(update: Update, context: ContextTypes.DEFAU
         await update.message.reply_text(success_text)
 
     except Exception as error:
-        print(error)
+        print(f"FatSecret authorization failed: {type(error).__name__}")
         await update.message.reply_text(fail_text)
         return WAITING_VERIFIER
 
