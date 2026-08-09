@@ -1,7 +1,5 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
-    Application,
-    CommandHandler,
     ConversationHandler,
     ContextTypes
 )
@@ -18,12 +16,12 @@ from repositories.user_repository import get_user, save_fatsecret_credentials
 
 WAITING_VERIFIER = 1
 
-async def start_fatsecret_auth(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def start_fatsecret_auth(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     telegram_id = update.effective_user.id
     language = get_user(telegram_id).language
     query = update.callback_query
     await query.answer()
-    
+
     auth_data = await asyncio.to_thread(
         start_authorization
     )
@@ -66,10 +64,7 @@ async def start_fatsecret_auth(update: Update, context: ContextTypes.DEFAULT_TYP
 async def process_fatsecret_verifier(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     telegram_id = update.effective_user.id
     language = get_user(telegram_id).language
-    print("Запустился код проверки")
-    
     verifier = update.message.text.strip()
-    print("Отловил verifier! " +  verifier)
 
     request_token = context.user_data.get("request_token")
     request_token_secret = context.user_data.get("request_token_secret")
@@ -89,7 +84,13 @@ async def process_fatsecret_verifier(update: Update, context: ContextTypes.DEFAU
         return ConversationHandler.END
 
     try: 
-        user_token, user_token_secret = complete_authorization(telegram_id, request_token, request_token_secret, verifier)
+        user_token, user_token_secret = await asyncio.to_thread(
+            complete_authorization,
+            telegram_id,
+            request_token,
+            request_token_secret,
+            verifier,
+        )
 
         save_fatsecret_credentials(
             telegram_id, 
