@@ -22,6 +22,12 @@ from handlers.fatsecret_auth import (
     WAITING_VERIFIER
 )
 
+from handlers.menu import (
+    back_to_main_menu,
+    open_photo_screen,
+    open_settings_screen
+)
+
 load_dotenv()
 
 telegram_api_key = os.getenv("TELEGRAM_API_KEY")
@@ -54,6 +60,27 @@ def main() -> None:
         CallbackQueryHandler(
             select_language,
             pattern=r"^language_(ru|en)$",
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            open_photo_screen,
+            pattern=r"^menu_photo$",
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            back_to_main_menu ,
+            pattern=r"^menu_back$",
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            open_settings_screen ,
+            pattern=r"^menu_settings$",
         )
     )
 
