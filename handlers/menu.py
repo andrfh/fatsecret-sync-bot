@@ -12,7 +12,7 @@ def build_main_menu(language: str) -> tuple[str, InlineKeyboardMarkup]:
             "Используйте кнопки ниже для управления дневником питания, "
             "добавления новых приемов пищи и изменения параметров приложения."
         )
-        photo_text = "Добавить прием пищи"
+        photo_text = "Добавить еду по фото"
         settings_text = "Настройки"
     elif language == "en":
         menu_text = (
@@ -20,7 +20,7 @@ def build_main_menu(language: str) -> tuple[str, InlineKeyboardMarkup]:
             "Use the buttons below to manage your food diary, "
             "add new meals, and change application parameters."
         )
-        photo_text = "Add meal"
+        photo_text = "Add meal by photo"
         settings_text = "Settings"
 
     keyboard = [
@@ -39,7 +39,13 @@ async def open_photo_screen(update, context):
     query = update.callback_query
     await query.answer()
 
-    await query.edit_message_text("Здесь будет обработчик фото")
+    keyboard = [
+        [
+            InlineKeyboardButton("Назад", callback_data='menu_back')           
+        ]
+    ]
+
+    await query.edit_message_text("Здесь будет обработчик фото", reply_markup = InlineKeyboardMarkup(keyboard))
 
 async def open_settings_screen(update, context):
     telegram_id = update.effective_user.id
@@ -65,7 +71,7 @@ async def open_settings_screen(update, context):
             InlineKeyboardButton(language_text, callback_data='language_' + another_language)
         ],
         [
-            InlineKeyboardButton(back_text, callback_data='settings_back')
+            InlineKeyboardButton(back_text, callback_data='menu_back')
         ]
     ]
 

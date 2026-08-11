@@ -25,8 +25,7 @@ from handlers.fatsecret_auth import (
 from handlers.menu import (
     back_to_main_menu,
     open_photo_screen,
-    open_settings_screen,
-    build_main_menu
+    open_settings_screen
 )
 
 load_dotenv()
@@ -74,7 +73,7 @@ def main() -> None:
     app.add_handler(
         CallbackQueryHandler(
             back_to_main_menu ,
-            pattern=r"^settings_back$",
+            pattern=r"^menu_back$",
         )
     )
 
@@ -84,7 +83,7 @@ def main() -> None:
             pattern=r"^menu_settings$",
         )
     )
-    
+
     app.add_handler(fatsecret_auth_conv)
 
     app.run_polling()

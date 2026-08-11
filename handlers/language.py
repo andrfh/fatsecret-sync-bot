@@ -39,8 +39,6 @@ async def select_language(update: Update, context: ContextTypes.DEFAULT_TYPE,) -
 
     user = get_user(telegram_id)
 
-    text, markup = build_main_menu(user.language)
-
     if user is None:
         await query.edit_message_text("User not found.")
         return
@@ -53,6 +51,8 @@ async def select_language(update: Update, context: ContextTypes.DEFAULT_TYPE,) -
             await query.edit_message_text("Для продолжения подключите аккаунт FatSecret.",
             reply_markup=InlineKeyboardMarkup(auth_button_ru))
         return
+
+    text, markup = build_main_menu(user.language)
     
     await query.edit_message_text(text, reply_markup=markup) 
 
