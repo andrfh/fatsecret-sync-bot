@@ -56,19 +56,19 @@ async def open_settings_screen(update, context):
 
     if language == "ru":
         settings_text = "Меню настроек"
-        language_text = "Сменить язык системы"
+        language_text = "Сменить язык системы (Настройки появятся на следующем этапе.)"
         back_text = "Вернуться в меню"
         another_language="en"
     elif language == "en":
         settings_text = "Settings menu"
-        language_text = "Change system lamguage"
+        language_text = "Change system lamguage (Настройки появятся на следующем этапе.)"
         back_text = "Back to the menu"
         another_language="ru"
 
 
     keyboard = [
         [
-            InlineKeyboardButton(language_text, callback_data='language_' + another_language)
+            InlineKeyboardButton(language_text)
         ],
         [
             InlineKeyboardButton(back_text, callback_data='menu_back')
