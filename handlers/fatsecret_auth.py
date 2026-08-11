@@ -9,7 +9,7 @@ import asyncio
 from services.fatsecret_auth_service import start_authorization
 from services.fatsecret_auth_service import complete_authorization
 from repositories.user_repository import get_user
-
+from handlers.menu import build_main_menu
 
 WAITING_VERIFIER = 1
 
@@ -98,7 +98,12 @@ async def process_fatsecret_verifier(update: Update, context: ContextTypes.DEFAU
             verifier,
         )
 
+        user = get_user(telegram_id)
+        text, markup = build_main_menu(user.language)
         await update.message.reply_text(success_text)
+        await update.message.reply_text(text, reply_markup=markup) 
+
+        
 
     except Exception as error:
         print(f"FatSecret authorization failed: {type(error).__name__}")

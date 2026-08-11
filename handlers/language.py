@@ -5,6 +5,8 @@ from telegram.ext import (
 
 from repositories.user_repository import get_user, update_language
 
+from handlers.menu import build_main_menu
+
 async def select_language(update: Update, context: ContextTypes.DEFAULT_TYPE,) -> None:
     telegram_id = update.effective_user.id
     query = update.callback_query
@@ -28,14 +30,16 @@ async def select_language(update: Update, context: ContextTypes.DEFAULT_TYPE,) -
     ]
 
     auth_button_en = [
-            [
-                InlineKeyboardButton("Connect FatSecret!", callback_data='fatsecret_auth_start')
-            ]
+        [
+            InlineKeyboardButton("Connect FatSecret!", callback_data='fatsecret_auth_start')
         ]
+    ]
 
     update_language(telegram_id, language)
 
     user = get_user(telegram_id)
+
+    text, markup = build_main_menu(user.language)
 
     if user is None:
         await query.edit_message_text("User not found.")
@@ -50,7 +54,7 @@ async def select_language(update: Update, context: ContextTypes.DEFAULT_TYPE,) -
             reply_markup=InlineKeyboardMarkup(auth_button_ru))
         return
     
-    await query.edit_message_text("Main menu.") 
+    await query.edit_message_text(text, reply_markup=markup) 
 
 
     

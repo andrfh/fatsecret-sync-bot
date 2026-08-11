@@ -22,6 +22,13 @@ from handlers.fatsecret_auth import (
     WAITING_VERIFIER
 )
 
+from handlers.menu import (
+    back_to_main_menu,
+    open_photo_screen,
+    open_settings_screen,
+    build_main_menu
+)
+
 load_dotenv()
 
 telegram_api_key = os.getenv("TELEGRAM_API_KEY")
@@ -57,6 +64,27 @@ def main() -> None:
         )
     )
 
+    app.add_handler(
+        CallbackQueryHandler(
+            open_photo_screen,
+            pattern=r"^menu_photo$",
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            back_to_main_menu ,
+            pattern=r"^settings_back$",
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            open_settings_screen ,
+            pattern=r"^menu_settings$",
+        )
+    )
+    
     app.add_handler(fatsecret_auth_conv)
 
     app.run_polling()

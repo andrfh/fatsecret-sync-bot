@@ -5,6 +5,8 @@ from telegram.ext import (
 
 from repositories.user_repository import create_user, get_user
 
+from handlers.menu import build_main_menu
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     telegram_id = update.effective_user.id
     user = get_user(telegram_id)
@@ -12,7 +14,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         [
             InlineKeyboardButton("RU Русский", callback_data='language_ru'),
             InlineKeyboardButton("EN English", callback_data='language_en'),
-
         ]
     ]
 
@@ -51,7 +52,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             reply_markup=InlineKeyboardMarkup(auth_button_ru))
         return
 
-    await update.message.reply_text("Main menu") 
+    text, markup = build_main_menu(user.language)
+
+    await update.message.reply_text(text, reply_markup=markup) 
 
     
 
