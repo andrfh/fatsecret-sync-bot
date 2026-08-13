@@ -123,4 +123,19 @@ async def cancel_fatsecret_auth(
     context.user_data.pop("request_token_secret", None)
     
     return ConversationHandler.END
-        
+
+def build_fatsecret_connection_screen(language: str) -> tuple[str, InlineKeyboardMarkup]:
+    if language == "ru":
+        screen_text = "Для продолжения подключите аккаунт FatSecret."
+        button_text = "Подключить FatSecret!"
+    elif language == "en":
+        screen_text = "Connect your FatSecret account to continue."
+        button_text = "Connect FatSecret!"
+
+    keyboard = [
+        [
+            InlineKeyboardButton(button_text, callback_data="fatsecret_auth_start")
+        ]
+    ]
+
+    return screen_text, InlineKeyboardMarkup(keyboard)
