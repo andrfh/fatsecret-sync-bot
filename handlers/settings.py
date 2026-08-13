@@ -7,6 +7,65 @@ from repositories.user_repository import get_user, update_language, remove_fatse
 from handlers.menu import build_main_menu
 from handlers.start import start
 
+async def open_settings_screen(update, context):
+    telegram_id = update.effective_user.id
+    language = get_user(telegram_id).language
+
+    query = update.callback_query
+    await query.answer()
+
+    if language == "ru":
+        settings_text = "Меню настроек"
+        language_text = "Сменить язык системы"
+        loguot_text = "Выйти из аккаунта"
+        back_text = "Вернуться в меню"
+    elif language == "en":
+        settings_text = "Settings menu"
+        language_text = "Change system lamguage"
+        loguot_text = "Log out from profile"
+        back_text = "Back to the menu"
+
+    keyboard = [
+        [
+            InlineKeyboardButton(language_text, callback_data="settings_language")
+        ],
+        [
+            InlineKeyboardButton(loguot_text, callback_data="settings_logout")
+        ],
+        [
+            InlineKeyboardButton(back_text, callback_data='menu_back')
+        ]
+    ]
+
+    await query.edit_message_text(settings_text, reply_markup=InlineKeyboardMarkup(keyboard)) 
+
+def build_settings_menu(language: str) -> tuple[str, InlineKeyboardMarkup]:
+    if language == "ru":
+            settings_text = "Меню настроек"
+            language_text = "Сменить язык системы"
+            loguot_text = "Выйти из аккаунта"
+            back_text = "Вернуться в меню"
+    elif language == "en":
+        settings_text = "Settings menu"
+        language_text = "Change system lamguage"
+        loguot_text = "Log out from profile"
+        back_text = "Back to the menu"
+
+    keyboard = [
+        [
+            InlineKeyboardButton(language_text, callback_data="settings_language")
+        ],
+        [
+            InlineKeyboardButton(loguot_text, callback_data="settings_logout")
+        ],
+        [
+            InlineKeyboardButton(back_text, callback_data='menu_back')
+        ]
+    ]
+
+    return settings_text, InlineKeyboardMarkup(keyboard)
+
+
 async def cahnge_language(update: Update, context: ContextTypes.DEFAULT_TYPE,) -> None:
     telegram_id = update.effective_user.id
     query = update.callback_query
@@ -27,12 +86,12 @@ async def cahnge_language(update: Update, context: ContextTypes.DEFAULT_TYPE,) -
         )
     elif query.data == "settings_language_ru":
         update_language(telegram_id, "ru")
-        menu_text, markup = build_main_menu("ru")
+        menu_text, markup = build_settings_menu("ru")
         await query.edit_message_text(menu_text, reply_markup=markup) 
 
     elif query.data == "settings_language_en":
         update_language(telegram_id, "en")
-        menu_text, markup = build_main_menu("en")
+        menu_text, markup = build_settings_menu("en")
         await query.edit_message_text(menu_text, reply_markup=markup) 
         
 async def settings_fatsecret_tokens(update: Update, context: ContextTypes.DEFAULT_TYPE,) -> None:
@@ -74,11 +133,12 @@ async def settings_fatsecret_tokens(update: Update, context: ContextTypes.DEFAUL
 
     elif query.data == "settings_logout_yes":
         try:
-            await query.delete_message() 
             remove_fatsecret_tokens(telegram_id)
-            await start(update, context) 
         except:
             await query.edit_message_text(error_text, reply_markup=InlineKeyboardMarkup(keyboard_back))
+        finally:
+            await query.delete_message() 
+            await start(update, context) 
 
     elif query.data == "settings_logout_no":
         menu_text, markup = build_main_menu(language)

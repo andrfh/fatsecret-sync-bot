@@ -27,12 +27,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         create_user(telegram_id)
         user = get_user(telegram_id)
         if user is None:
-            # Используем effective_message
             await update.effective_message.reply_text("Error while user created. Try again later") 
             return
         
     if user.language is None or user.language == '':   
-        # Используем effective_message
         await update.effective_message.reply_text(
             'Выберите ваш язык / Choose your language:',
             reply_markup=InlineKeyboardMarkup(keyboard)
@@ -40,7 +38,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     
     if not user.fatsecret_token or not user.fatsecret_token_secret:
-        # Используем effective_message
         if user.language == "en":
             await update.effective_message.reply_text(
                 "Connect your FatSecret account to continue.",
@@ -54,5 +51,4 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     text, markup = build_main_menu(user.language)
-    # Используем effective_message
     await update.effective_message.reply_text(text, reply_markup=markup)

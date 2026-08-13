@@ -21,12 +21,16 @@ from handlers.fatsecret_auth import (
     cancel_fatsecret_auth,
     WAITING_VERIFIER
 )
-from handlers.settings import cahnge_language, settings_fatsecret_tokens
+from handlers.settings import (
+    cahnge_language, 
+    settings_fatsecret_tokens, 
+    open_settings_screen
+)
 
 from handlers.menu import (
     back_to_main_menu,
     open_photo_screen,
-    open_settings_screen
+    
 )
 
 load_dotenv()
