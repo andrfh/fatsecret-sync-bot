@@ -14,7 +14,7 @@ def build_settings_menu(language: str) -> tuple[str, InlineKeyboardMarkup]:
         back_text = "Вернуться в меню"
     elif language == "en":
         settings_text = "Settings menu"
-        language_text = "Change system lamguage"
+        language_text = "Change system language"
         disconnect_text = "Disconnect FatSecret"
         back_text = "Back to the menu"
 
@@ -93,7 +93,7 @@ async def disconnect_fatsecret(update: Update, context: ContextTypes.DEFAULT_TYP
         confirm = "Are you sure you want to disconnect FatSecret? \n"
         confirm_yes = "Yes, disconnect"
         confirm_no = "Cancel"
-        error_text = "Somethnig went wrong. Please, try again later"
+        error_text = "Something went wrong. Please, try again later"
         back_text = "Back to the menu"
 
     keyboard = [
