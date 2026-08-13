@@ -66,7 +66,24 @@ def save_fatsecret_credentials(
                 fatsecret_connected_at = ?
             WHERE telegram_id = ?
             """,
-        (token, token_secret, connected_at, telegram_id),
+        (token, token_secret, connected_at, telegram_id,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+def remove_fatsecret_tokens(telegram_id: int) -> None:
+    connection = sqlite3.connect(DB_PATH)
+    try:
+        cursor = connection.execute(
+            """
+            UPDATE users
+            SET fatsecret_token = NULL,
+                fatsecret_token_secret = NULL,
+                fatsecret_connected_at = NULL
+            WHERE telegram_id = ?   
+            """,
+        (telegram_id,),
         )
         connection.commit()
     finally:

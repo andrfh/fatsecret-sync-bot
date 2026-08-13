@@ -21,6 +21,7 @@ from handlers.fatsecret_auth import (
     cancel_fatsecret_auth,
     WAITING_VERIFIER
 )
+from handlers.settings import cahnge_language, settings_fatsecret_tokens
 
 from handlers.menu import (
     back_to_main_menu,
@@ -81,6 +82,34 @@ def main() -> None:
         CallbackQueryHandler(
             open_settings_screen ,
             pattern=r"^menu_settings$",
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            cahnge_language ,
+            pattern=r"^settings_language$",
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            cahnge_language ,
+            pattern=r"^settings_language_(ru|en)$",
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            settings_fatsecret_tokens ,
+            pattern=r"^settings_logout$",
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            settings_fatsecret_tokens ,
+            pattern=r"^settings_logout_(yes|no)$",
         )
     )
 
