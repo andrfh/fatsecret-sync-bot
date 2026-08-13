@@ -47,38 +47,6 @@ async def open_photo_screen(update, context):
 
     await query.edit_message_text("Здесь будет обработчик фото", reply_markup = InlineKeyboardMarkup(keyboard))
 
-async def open_settings_screen(update, context):
-    telegram_id = update.effective_user.id
-    language = get_user(telegram_id).language
-
-    query = update.callback_query
-    await query.answer()
-
-    if language == "ru":
-        settings_text = "Меню настроек"
-        language_text = "Сменить язык системы (Настройки появятся на следующем этапе.)"
-        back_text = "Вернуться в меню"
-        another_language="en"
-    elif language == "en":
-        settings_text = "Settings menu"
-        language_text = "Change system lamguage (Настройки появятся на следующем этапе.)"
-        back_text = "Back to the menu"
-        another_language="ru"
-
-
-    keyboard = [
-        [
-            InlineKeyboardButton(language_text)
-        ],
-        [
-            InlineKeyboardButton(back_text, callback_data='menu_back')
-        ]
-    ]
-
-    await query.edit_message_text(settings_text, reply_markup=InlineKeyboardMarkup(keyboard)) 
-
-
-    
 
 async def back_to_main_menu(update, context):
     telegram_id = update.effective_user.id
@@ -87,7 +55,6 @@ async def back_to_main_menu(update, context):
 
     language = get_user(telegram_id).language
 
-
-    menu_text, markup  = build_main_menu(language)
+    menu_text, markup = build_main_menu(language)
 
     await query.edit_message_text(menu_text, reply_markup=markup) 
