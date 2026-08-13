@@ -22,8 +22,8 @@ from handlers.fatsecret_auth import (
     WAITING_VERIFIER
 )
 from handlers.settings import (
-    cahnge_language, 
-    settings_fatsecret_tokens, 
+    change_language, 
+    disconnect_fatsecret, 
     open_settings_screen
 )
 
@@ -39,7 +39,10 @@ telegram_api_key = os.getenv("TELEGRAM_API_KEY")
 
 fatsecret_auth_conv = ConversationHandler(
     entry_points=[
-        CallbackQueryHandler(start_fatsecret_auth, pattern=r"^fatsecret_auth_start$")
+        CallbackQueryHandler(
+            start_fatsecret_auth,
+            pattern=r"^fatsecret_auth_start$",
+        )
     ],
     states={
         WAITING_VERIFIER: [
@@ -52,7 +55,8 @@ fatsecret_auth_conv = ConversationHandler(
     fallbacks=[
         CommandHandler("cancel", cancel_fatsecret_auth)
     ],
-    name="fatsecret_auth_conversation"
+    allow_reentry=True,
+    name="fatsecret_auth_conversation",
 )
 
 def main() -> None:
@@ -91,29 +95,29 @@ def main() -> None:
 
     app.add_handler(
         CallbackQueryHandler(
-            cahnge_language ,
+            change_language ,
             pattern=r"^settings_language$",
         )
     )
 
     app.add_handler(
         CallbackQueryHandler(
-            cahnge_language ,
+            change_language ,
             pattern=r"^settings_language_(ru|en)$",
         )
     )
 
     app.add_handler(
         CallbackQueryHandler(
-            settings_fatsecret_tokens ,
-            pattern=r"^settings_logout$",
+            disconnect_fatsecret ,
+            pattern=r"^settings_disconnect$",
         )
     )
 
     app.add_handler(
         CallbackQueryHandler(
-            settings_fatsecret_tokens ,
-            pattern=r"^settings_logout_(yes|no)$",
+            disconnect_fatsecret ,
+            pattern=r"^settings_disconnect_(confirm|cancel)$",
         )
     )
 
