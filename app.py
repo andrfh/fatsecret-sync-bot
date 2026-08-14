@@ -29,7 +29,6 @@ from handlers.settings import (
 
 from handlers.menu import (
     back_to_main_menu,
-    open_photo_screen,
 )
 
 from handlers.photo import (

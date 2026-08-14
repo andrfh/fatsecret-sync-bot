@@ -43,7 +43,6 @@ async def open_photo_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.effective_user.id
     language = get_user(telegram_id).language
-    query = update.callback_query
 
     if language == "ru":
         no_description_text = "Отсутствует"
@@ -76,12 +75,11 @@ async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         image_bytes = buffer.getvalue()
 
-        buffer.seek(0)
-
         context.user_data["meal_photo_bytes"] = image_bytes
         context.user_data["meal_photo_file_id"] = photo.file_id
         context.user_data["meal_description"] = description
-    except:
+        
+    except Exception as error:
         await update.message.reply_text(error_text)
         return WAITING_PHOTO
 

@@ -34,20 +34,6 @@ def build_main_menu(language: str) -> tuple[str, InlineKeyboardMarkup]:
 
     return menu_text, InlineKeyboardMarkup(keyboard)
 
-
-async def open_photo_screen(update, context):
-    query = update.callback_query
-    await query.answer()
-
-    keyboard = [
-        [
-            InlineKeyboardButton("Назад", callback_data='menu_back')           
-        ]
-    ]
-
-    await query.edit_message_text("Здесь будет обработчик фото", reply_markup = InlineKeyboardMarkup(keyboard))
-
-
 async def back_to_main_menu(update, context):
     telegram_id = update.effective_user.id
     query = update.callback_query
