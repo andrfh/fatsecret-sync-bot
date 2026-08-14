@@ -153,27 +153,14 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 description,
             )
 
-            await query.delete_message()
-
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=ai_response,
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            context.user_data.pop("meal_photo_bytes", None)
-            context.user_data.pop("meal_photo_file_id", None)
-            context.user_data.pop("meal_description", None)
-
-            return ConversationHandler.END
         except Exception as error:
-            await query.delete_message()
             chat_id = update.effective_chat.id
 
             photo = BytesIO(image_bytes)
 
             keyboard = build_confirm_keyboard(language)
 
-            if error.error.message == "User location is not supported for the API use.":
+            if "User location is not supported for the API use." in str(error):
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=access_error_text
@@ -189,6 +176,18 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=keyboard
             )
             return WAITING_CONFIRM
+        await query.delete_message()
+    
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=ai_response,
+            reply_markup=keyboard
+        )
+        context.user_data.pop("meal_photo_bytes", None)
+        context.user_data.pop("meal_photo_file_id", None)
+        context.user_data.pop("meal_description", None)
+
+        return ConversationHandler.END
 
     elif query.data == "confirm_btn_update":
         await query.delete_message()
