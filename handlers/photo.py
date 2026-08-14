@@ -7,8 +7,12 @@ from io import BytesIO
 
 from html import escape
 
+import asyncio
+
 from repositories.user_repository import get_user
 from handlers.menu import build_main_menu
+
+from clients.gemini_client import recognize_image
 
 WAITING_PHOTO = 1
 WAITING_CONFIRM = 2
@@ -28,6 +32,31 @@ def build_photo_screen(language: str) -> tuple[str, InlineKeyboardMarkup]:
     ]
 
     return screen_text, InlineKeyboardMarkup(keyboard)
+
+def build_confirm_keyboard(language: str) -> InlineKeyboardMarkup:
+    if language == "ru":
+        confirm_btn_approve = "Готово"
+        confirm_btn_update = "Отправить заново"
+        confirm_btn_cancel = "Отмена"
+        
+    elif language == "en":
+        confirm_btn_approve = "Done"
+        confirm_btn_update = "Resend"
+        confirm_btn_cancel = "Cancel"
+
+    keyboard = [
+        [
+            InlineKeyboardButton(confirm_btn_approve, callback_data='confirm_btn_approve')           
+        ],
+        [
+            InlineKeyboardButton(confirm_btn_update, callback_data='confirm_btn_update')           
+        ],
+        [
+            InlineKeyboardButton(confirm_btn_cancel, callback_data='confirm_btn_cancel')           
+        ]
+    ]
+
+    return InlineKeyboardMarkup(keyboard)
 
 async def open_photo_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     telegram_id = update.effective_user.id
@@ -67,6 +96,8 @@ async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         confirm_btn_cancel = "Cancel"
         
     photo = update.message.photo[-1]
+
+    keyboard = build_confirm_keyboard(language)
     
     try:
         telegram_file = await photo.get_file()
@@ -78,24 +109,10 @@ async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["meal_photo_bytes"] = image_bytes
         context.user_data["meal_photo_file_id"] = photo.file_id
         context.user_data["meal_description"] = description
-        
+
     except Exception as error:
         await update.message.reply_text(error_text)
-        return WAITING_PHOTO
-
-    keyboard = [
-            [
-                InlineKeyboardButton(confirm_btn_approve, callback_data='confirm_btn_approve')           
-            ],
-            [
-                InlineKeyboardButton(confirm_btn_update, callback_data='confirm_btn_update')           
-            ],
-            [
-                InlineKeyboardButton(confirm_btn_cancel, callback_data='confirm_btn_cancel')           
-            ]
-        ]
-
-    
+        return WAITING_PHOTO    
 
     await update.message.reply_photo(
         photo=photo.file_id,
@@ -112,6 +129,13 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
+    if language == "ru":
+        error_text = "Что-то пошло не так. Пожалуйста, попробуйте еще раз"
+        access_error_text = "Доступ к нейросети из Вашего региона недоступен. Попробуйте включить VPN или отключите (настройте) раздельное туннелирование."
+    elif language == "en":
+        error_text = "Something went wrong. Please try again" 
+        access_error_text = "Access to the neural network from your region is not available. Try enabling VPN or disabling (configuring) split tunneling."
+
     keyboard = [
         [
             InlineKeyboardButton("Назад в меню", callback_data="menu_back")
@@ -119,19 +143,53 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     if query.data == "confirm_btn_approve":
-        context.user_data.pop("meal_photo_bytes", None)
-        context.user_data.pop("meal_photo_file_id", None)
-        context.user_data.pop("meal_description", None)
+        image_bytes = context.user_data["meal_photo_bytes"]
+        description = context.user_data["meal_description"]
 
-        await query.delete_message()
+        try:
+            ai_response = await asyncio.to_thread(
+                recognize_image,
+                image_bytes,
+                description,
+            )
 
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="Фото принято. Распознавание будет добавлено на следующем этапе",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+            await query.delete_message()
 
-        return ConversationHandler.END
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=ai_response,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            context.user_data.pop("meal_photo_bytes", None)
+            context.user_data.pop("meal_photo_file_id", None)
+            context.user_data.pop("meal_description", None)
+
+            return ConversationHandler.END
+        except Exception as error:
+            await query.delete_message()
+            chat_id = update.effective_chat.id
+
+            photo = BytesIO(image_bytes)
+
+            keyboard = build_confirm_keyboard(language)
+
+            if error.error.message == "User location is not supported for the API use.":
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=access_error_text
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=error_text
+                )
+            await context.bot.send_photo(
+                chat_id=chat_id,
+                photo=photo,
+                reply_markup=keyboard
+            )
+            return WAITING_CONFIRM
+
     elif query.data == "confirm_btn_update":
         await query.delete_message()
 
