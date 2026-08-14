@@ -37,6 +37,7 @@ from handlers.photo import (
     process_photo,
     cancel_photo_flow,
     confirm_screen,
+    photo_exception,
     WAITING_PHOTO,
     WAITING_CONFIRM
 )
@@ -80,6 +81,10 @@ photo_process_conv = ConversationHandler(
             MessageHandler(
                 filters.PHOTO,
                 process_photo,
+            ),
+            MessageHandler(
+                ~filters.PHOTO & ~filters.COMMAND,
+                photo_exception,
             )
         ],
 
