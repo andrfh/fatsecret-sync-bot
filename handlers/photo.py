@@ -109,12 +109,28 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     if query.data == "confirm_btn_update":
-        screen_text, markup = build_photo_screen(language)
-        await update.effective_message.reply_text(screen_text, reply_markup = markup)
+        await query.delete_message()
+        
+        menu_text, markup = build_photo_screen(language)
+
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=menu_text,
+            reply_markup=markup,
+        )
+
         return WAITING_PHOTO
     elif query.data == "confirm_btn_cancel":
+        await query.delete_message()
+
         menu_text, markup = build_main_menu(language)
-        await update.effective_message.reply_text(menu_text, reply_markup=markup) 
+
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=menu_text,
+            reply_markup=markup,
+        )
+
         return ConversationHandler.END
     
     

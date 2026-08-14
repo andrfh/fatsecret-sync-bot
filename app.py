@@ -37,7 +37,8 @@ from handlers.photo import (
     process_photo,
     cancel_photo_flow,
     confirm_screen,
-    WAITING_PHOTO
+    WAITING_PHOTO,
+    WAITING_CONFIRM
 )
 
 load_dotenv()
@@ -80,16 +81,19 @@ photo_process_conv = ConversationHandler(
                 filters.PHOTO,
                 process_photo,
             )
-        ]
+        ],
+
+        WAITING_CONFIRM: [
+            CallbackQueryHandler(
+                confirm_screen,
+                pattern=r"^confirm_btn_(approve|update|cancel)$",
+            )
+        ],
     },
     fallbacks=[
         CallbackQueryHandler(
             cancel_photo_flow,
             pattern=r"^photo_cancel$",
-        ),
-        CallbackQueryHandler(
-            confirm_screen,
-            pattern=r"^confirm_btn_(approve|update|cancel)$",
         )
     ],
     allow_reentry=True,
