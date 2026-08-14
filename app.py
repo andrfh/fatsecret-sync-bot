@@ -65,26 +65,30 @@ fatsecret_auth_conv = ConversationHandler(
     name="fatsecret_auth_conversation",
 )
 
-photo_proccess_conv = ConversationHandler(
+photo_process_conv = ConversationHandler(
     entry_points=[
         CallbackQueryHandler(
-            process_photo,
-            pattern=r"^photo_proccess$",
+            open_photo_flow,
+            pattern=r"^menu_photo$",
         )
     ],
+
     states={
         WAITING_PHOTO: [
             MessageHandler(
-                filters.TEXT & ~filters.PHOTO,
+                filters.PHOTO,
                 process_photo,
             )
         ]
     },
     fallbacks=[
-        CommandHandler("photo_cancel", cancel_photo_flow)
+        CallbackQueryHandler(
+            cancel_photo_flow,
+            pattern=r"^photo_cancel$",
+        )
     ],
     allow_reentry=True,
-    name="photo_proccess_conversation",
+    name="photo_process_conversation",
 )
 
 def main() -> None:
@@ -97,13 +101,6 @@ def main() -> None:
         CallbackQueryHandler(
             select_language,
             pattern=r"^language_(ru|en)$",
-        )
-    )
-
-    app.add_handler(
-        CallbackQueryHandler(
-            open_photo_flow,
-            pattern=r"^menu_photo$",
         )
     )
 
@@ -149,6 +146,8 @@ def main() -> None:
         )
     )
     app.add_handler(fatsecret_auth_conv)
+    
+    app.add_handler(photo_process_conv)
 
     app.run_polling()
 

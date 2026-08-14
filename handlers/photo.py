@@ -38,18 +38,10 @@ async def open_photo_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     return WAITING_PHOTO
     
-async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    telegram_id = update.effective_user.id
-    language = get_user(telegram_id).language
-    buffer = BytesIO()
+async def process_photo(update, context):
+    await update.message.reply_text("Photo received")
 
-    photo = update.message.photo[-1]
-    telegram_file = await photo.get_file()
-
-    print(telegram_file)
-
-    await telegram_file.download_to_memory(buffer)
-    buffer.seek(0)
+    return ConversationHandler.END
     
 async def cancel_photo_flow(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.effective_user.id
