@@ -5,6 +5,8 @@ from telegram.ext import (
 )
 from io import BytesIO
 
+from html import escape
+
 from repositories.user_repository import get_user
 from handlers.menu import build_main_menu
 
@@ -44,27 +46,29 @@ async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
 
     if language == "ru":
-        confirm_text = f"Подтвердите правильность запроса:\nОписание: <i>{description}</i>"
+        no_description_text = "Отсутствует"
+    elif language == "en":
+        no_description_text = "No description"
+
+    description = update.message.caption or no_description_text
+    safe_description = escape(description)
+
+    if language == "ru":
+        confirm_text = f"Подтвердите правильность запроса:\nОписание: <i>{safe_description}</i>"
         error_text = "Не удалось загрузить фото, попробуйте ещё раз"
         confirm_btn_approve = "Готово"
         confirm_btn_update = "Отправить заново"
         confirm_btn_cancel = "Отмена"
+        
     elif language == "en":
-        confirm_text = f"Confirm the request is correct:\nDescription: <i>{description}</i>"
+        confirm_text = f"Confirm the request is correct:\nDescription: <i>{safe_description}</i>"
         error_text = "Failed to upload photo, try again"
         confirm_btn_approve = "Done"
         confirm_btn_update = "Resend"
         confirm_btn_cancel = "Cancel"
-
+        
     photo = update.message.photo[-1]
-    if update.message.caption:
-        description = update.message.caption 
-    else:
-        if language == "ru":
-            description = "Отсутствует"
-        elif language == "en":
-            description = "No description"
-
+    
     try:
         telegram_file = await photo.get_file()
         buffer = BytesIO()
@@ -79,6 +83,7 @@ async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["meal_description"] = description
     except:
         await update.message.reply_text(error_text)
+        return WAITING_PHOTO
 
     keyboard = [
             [
