@@ -117,7 +117,7 @@ async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_photo(
         photo=photo.file_id,
         caption=confirm_text,
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        reply_markup=keyboard,
         parse_mode="HTML" 
     )
 
@@ -159,6 +159,8 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
             photo = BytesIO(image_bytes)
 
             keyboard = build_confirm_keyboard(language)
+
+            await query.delete_message()
 
             if "User location is not supported for the API use." in str(error):
                 await context.bot.send_message(
