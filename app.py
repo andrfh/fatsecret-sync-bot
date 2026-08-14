@@ -29,8 +29,16 @@ from handlers.settings import (
 
 from handlers.menu import (
     back_to_main_menu,
-    open_photo_screen,
-    
+)
+
+from handlers.photo import (
+    open_photo_flow,
+    process_photo,
+    cancel_photo_flow,
+    confirm_screen,
+    photo_exception,
+    WAITING_PHOTO,
+    WAITING_CONFIRM
 )
 
 load_dotenv()
@@ -59,6 +67,43 @@ fatsecret_auth_conv = ConversationHandler(
     name="fatsecret_auth_conversation",
 )
 
+photo_process_conv = ConversationHandler(
+    entry_points=[
+        CallbackQueryHandler(
+            open_photo_flow,
+            pattern=r"^menu_photo$",
+        )
+    ],
+
+    states={
+        WAITING_PHOTO: [
+            MessageHandler(
+                filters.PHOTO,
+                process_photo,
+            ),
+            MessageHandler(
+                ~filters.PHOTO & ~filters.COMMAND,
+                photo_exception,
+            )
+        ],
+
+        WAITING_CONFIRM: [
+            CallbackQueryHandler(
+                confirm_screen,
+                pattern=r"^confirm_btn_(approve|update|cancel)$",
+            )
+        ],
+    },
+    fallbacks=[
+        CallbackQueryHandler(
+            cancel_photo_flow,
+            pattern=r"^photo_cancel$",
+        )
+    ],
+    allow_reentry=True,
+    name="photo_process_conversation",
+)
+
 def main() -> None:
     init_db()
 
@@ -69,13 +114,6 @@ def main() -> None:
         CallbackQueryHandler(
             select_language,
             pattern=r"^language_(ru|en)$",
-        )
-    )
-
-    app.add_handler(
-        CallbackQueryHandler(
-            open_photo_screen,
-            pattern=r"^menu_photo$",
         )
     )
 
@@ -120,8 +158,9 @@ def main() -> None:
             pattern=r"^settings_disconnect_(confirm|cancel)$",
         )
     )
-
     app.add_handler(fatsecret_auth_conv)
+    
+    app.add_handler(photo_process_conv)
 
     app.run_polling()
 
