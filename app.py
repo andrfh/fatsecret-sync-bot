@@ -36,6 +36,7 @@ from handlers.photo import (
     open_photo_flow,
     process_photo,
     cancel_photo_flow,
+    confirm_screen,
     WAITING_PHOTO
 )
 
@@ -85,6 +86,10 @@ photo_process_conv = ConversationHandler(
         CallbackQueryHandler(
             cancel_photo_flow,
             pattern=r"^photo_cancel$",
+        ),
+        CallbackQueryHandler(
+            confirm_screen,
+            pattern=r"^confirm_btn_(approve|update|cancel)$",
         )
     ],
     allow_reentry=True,
