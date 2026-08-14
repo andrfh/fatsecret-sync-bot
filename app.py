@@ -30,7 +30,13 @@ from handlers.settings import (
 from handlers.menu import (
     back_to_main_menu,
     open_photo_screen,
-    
+)
+
+from handlers.photo import (
+    open_photo_flow,
+    process_photo,
+    cancel_photo_flow,
+    WAITING_PHOTO
 )
 
 load_dotenv()
@@ -59,6 +65,28 @@ fatsecret_auth_conv = ConversationHandler(
     name="fatsecret_auth_conversation",
 )
 
+photo_proccess_conv = ConversationHandler(
+    entry_points=[
+        CallbackQueryHandler(
+            process_photo,
+            pattern=r"^photo_proccess$",
+        )
+    ],
+    states={
+        WAITING_PHOTO: [
+            MessageHandler(
+                filters.TEXT & ~filters.PHOTO,
+                process_photo,
+            )
+        ]
+    },
+    fallbacks=[
+        CommandHandler("photo_cancel", cancel_photo_flow)
+    ],
+    allow_reentry=True,
+    name="photo_proccess_conversation",
+)
+
 def main() -> None:
     init_db()
 
@@ -74,7 +102,7 @@ def main() -> None:
 
     app.add_handler(
         CallbackQueryHandler(
-            open_photo_screen,
+            open_photo_flow,
             pattern=r"^menu_photo$",
         )
     )
@@ -120,7 +148,6 @@ def main() -> None:
             pattern=r"^settings_disconnect_(confirm|cancel)$",
         )
     )
-
     app.add_handler(fatsecret_auth_conv)
 
     app.run_polling()
