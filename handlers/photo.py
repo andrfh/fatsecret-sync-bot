@@ -197,15 +197,57 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_token = user.fatsecret_token
         user_token_secret = user.fatsecret_token_secret
 
-        status_message = await update.message.reply_text("Анализирую фотографию...")
+        chat_id = update.effective_chat.id
+
+        status_message = await context.bot.send_message(
+            chat_id=chat_id,
+            text="⏳ Анализирую фотографию..."
+        )
         try:
             recognized_meal = await recognize_meal(image_bytes, description, meal_type)
 
-            await status_message.edit_text("Блюдо распознано!\n Ищу подходящие продукты в FatSecret...")
+            if recognized_meal["status"] == "not_food":
+                await status_message.edit_text(
+                    "ИИ не обнаружил на фотографии еду.",
+                    reply_markup=keyboard
+                )
+
+                context.user_data.pop("meal_photo_bytes", None)
+                context.user_data.pop("meal_photo_file_id", None)
+                context.user_data.pop("meal_description", None)
+        
+                return ConversationHandler.END
+
+            elif recognized_meal["status"] == "too_complex":
+                await status_message.edit_text(
+                    "На фотографии изображено слишком много блюд.",
+                    reply_markup=keyboard
+                )
+
+                context.user_data.pop("meal_photo_bytes", None)
+                context.user_data.pop("meal_photo_file_id", None)
+                context.user_data.pop("meal_description", None)
+        
+                return ConversationHandler.END
+
+            elif recognized_meal["status"] == "uncertain":
+                await status_message.edit_text(
+                    "Фотография слишком плохого качества.",
+                    reply_markup=keyboard
+                )
+
+                context.user_data.pop("meal_photo_bytes", None)
+                context.user_data.pop("meal_photo_file_id", None)
+                context.user_data.pop("meal_description", None)
+        
+                return ConversationHandler.END
+
+
+            await status_message.edit_text("✅ Блюдо распознано!\n⏳ Ищу подходящие продукты в FatSecret...")
 
             fatsecret_meal = await search_food(recognized_meal)
 
-            await status_message.edit_text("Блюдо распознано!\n Продукты найдены! \n Добавляю блюдо в FatSecret...")
+            await status_message.edit_text("✅ Блюдо распознано!\n✅Продукты найдены! \n⏳ Добавляю блюдо в FatSecret...")
 
             for food in fatsecret_meal["foods"]:
                 response = await asyncio.to_thread(
@@ -221,13 +263,16 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         except Exception as error:
             print(error)
-            chat_id = update.effective_chat.id
+
+            await status_message.edit_text(error_text)
 
             photo = BytesIO(image_bytes)
 
-            keyboard = build_confirm_keyboard(language)
-
-            await query.delete_message()
+            await context.bot.send_photo(
+                chat_id=chat_id,
+                photo=photo,
+                reply_markup=build_confirm_keyboard(language)
+            )
 
             if "User location is not supported for the API use." in str(error):
                 await context.bot.send_message(
@@ -239,18 +284,13 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     chat_id=chat_id,
                     text=error_text
                 )
-            await context.bot.send_photo(
-                chat_id=chat_id,
-                photo=photo,
-                reply_markup=keyboard
-            )
             return WAITING_CONFIRM
     
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=f"Блюдо успешно добавлено!\n ID: {response["food_entry_id"]["value"]}",
+        await status_message.edit_text(
+            f"✅ Блюдо успешно добавлено!",
             reply_markup=keyboard
         )
+
         context.user_data.pop("meal_photo_bytes", None)
         context.user_data.pop("meal_photo_file_id", None)
         context.user_data.pop("meal_description", None)
