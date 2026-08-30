@@ -40,10 +40,10 @@ def recognize_image(image_bytes: bytes, description: str, meal_type: str) -> str
 
     return interaction.output_text
 
-def gemini_search_food(recognized_meal: dict):
+def gemini_search_food(recognized_meal: dict, language: str):
     interaction = client.models.generate_content(
         model=Gemini_model,
-        contents=create_food_resolution_prompt(recognized_meal),
+        contents=create_food_resolution_prompt(recognized_meal, language),
         config=types.GenerateContentConfig(
             tools=[
                 fatsecret_food_search,

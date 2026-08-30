@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from datetime import datetime, timezone
+from datetime import date
 
 from clients.fatsecret_client import food_search
 from clients.fatsecret_client import get_food
@@ -32,6 +32,11 @@ def fatsecret_create_entry(
         meal: str
     ) -> dict:
 
+    epoch = date(1970, 1, 1)
+    today = date.today()
+
+    date_int = (today - epoch).days
+
     response = create_food_entry(
         consumer_key = FATSECRET_CONSUMER_KEY,
         consumer_secret = FATSECRET_CONSUMER_SECRET,
@@ -42,8 +47,9 @@ def fatsecret_create_entry(
         serving_id = serving_id,
         number_of_units = number_of_units,
         meal = meal,
-        date = int(datetime.now().timestamp() // 86400)
+        date = date_int
     )
 
     return response
+
 

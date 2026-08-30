@@ -206,6 +206,8 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             recognized_meal = await recognize_meal(image_bytes, description, meal_type)
 
+            print(recognized_meal)
+
             if recognized_meal["status"] == "not_food":
                 await status_message.edit_text(
                     "ИИ не обнаружил на фотографии еду.",
@@ -245,7 +247,9 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             await status_message.edit_text("✅ Блюдо распознано!\n⏳ Ищу подходящие продукты в FatSecret...")
 
-            fatsecret_meal = await search_food(recognized_meal)
+            fatsecret_meal = await search_food(recognized_meal, language)
+
+            print(fatsecret_meal)
 
             await status_message.edit_text("✅ Блюдо распознано!\n✅Продукты найдены! \n⏳ Добавляю блюдо в FatSecret...")
 
@@ -255,7 +259,7 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     user_token = user_token,
                     user_token_secret = user_token_secret,
                     food_id = food["food_id"],
-                    food_entry_name = recognized_meal["meal_name"],
+                    food_entry_name=food["food_name"],
                     serving_id = food["serving_id"],
                     number_of_units = food["number_of_units"],
                     meal = meal_type

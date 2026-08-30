@@ -16,8 +16,6 @@ async def recognize_meal(image_bytes: bytes, description: str, meal_type: str):
 
     meal_data = json.loads(ai_response)
 
-    print(meal_data)
-
     if meal_data["status"] in allowed_statuses:
         return meal_data
     
@@ -27,12 +25,13 @@ async def recognize_meal(image_bytes: bytes, description: str, meal_type: str):
             "message": "AI return not allowed status"
         }
 
-async def search_food(recognized_meal: dict):
+async def search_food(recognized_meal: dict, language: str):
     allowed_resolution = ["components", "whole_meal"]
 
     ai_response = await asyncio.to_thread(
         gemini_search_food,
-        recognized_meal
+        recognized_meal,
+        language
     )
 
     food_data = json.loads(ai_response)
