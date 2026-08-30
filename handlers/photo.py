@@ -12,7 +12,9 @@ import asyncio
 from repositories.user_repository import get_user
 from handlers.menu import build_main_menu
 
-from clients.gemini_client import recognize_image
+from services.gemini_service import recognize_meal
+from services.gemini_service import search_food
+from services.fatsecret_food_service import fatsecret_create_entry
 
 WAITING_PHOTO = 1
 WAITING_CONFIRM = 2
@@ -58,16 +60,61 @@ def build_confirm_keyboard(language: str) -> InlineKeyboardMarkup:
 
     return InlineKeyboardMarkup(keyboard)
 
-async def open_photo_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+def build_mealtype_screen(language: str) -> tuple[str, InlineKeyboardMarkup]:
+    if language == "ru":
+        meal_text = "Выберите прием пищи:"
+        meal_breakfast = "Завтрак"
+        meal_lunch = "Обед"
+        meal_dinner = "Ужин"
+        meal_other = "Перекус/Другое"
+        meal_cancel = "Вернуться в меню"
+        
+    elif language == "en":
+        meal_text = "Select meal:"
+        meal_breakfast = "Breakfast" 
+        meal_lunch = "Lunch" 
+        meal_dinner = "Dinner" 
+        meal_other = "Snack/Other"
+        meal_cancel = "Back to menu"
+
+    keyboard = [
+        [
+            InlineKeyboardButton(meal_breakfast, callback_data='meal_type-breakfast'),
+            InlineKeyboardButton(meal_lunch, callback_data='meal_type-lunch'),
+            InlineKeyboardButton(meal_dinner, callback_data='meal_type-dinner'),     
+            InlineKeyboardButton(meal_other, callback_data='meal_type-other')  
+        ],
+        [
+            InlineKeyboardButton(meal_cancel, callback_data='meal_cancel') 
+        ]
+    ]
+
+    return meal_text, InlineKeyboardMarkup(keyboard)
+
+async def start_proccess(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     telegram_id = update.effective_user.id
     language = get_user(telegram_id).language
     query = update.callback_query
     await query.answer()
 
-    screen_text, markup = build_photo_screen(language)
-    await query.edit_message_text(screen_text, reply_markup = markup)
-
-    return WAITING_PHOTO
+    if "meal_type" in query.data:
+        context.user_data["meal_type"] = query.data[10:]
+        photo_text, photo_markup = build_photo_screen(language)
+        await query.edit_message_text(photo_text, reply_markup = photo_markup)
+    
+        return WAITING_PHOTO
+    
+    elif query.data == "meal_cancel":
+        menu_text, menu_markup = build_main_menu(language)
+        await query.edit_message_text(menu_text, reply_markup=menu_markup) 
+        
+        return ConversationHandler.END
+    else:
+        meal_text, meal_markup = build_mealtype_screen(language)
+        await query.edit_message_text(meal_text, reply_markup=meal_markup)
+        return WAITING_PHOTO
+        
+    
     
 async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.effective_user.id
@@ -84,16 +131,10 @@ async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if language == "ru":
         confirm_text = f"Подтвердите правильность запроса:\nОписание: <i>{safe_description}</i>"
         error_text = "Не удалось загрузить фото, попробуйте ещё раз"
-        confirm_btn_approve = "Готово"
-        confirm_btn_update = "Отправить заново"
-        confirm_btn_cancel = "Отмена"
         
     elif language == "en":
         confirm_text = f"Confirm the request is correct:\nDescription: <i>{safe_description}</i>"
         error_text = "Failed to upload photo, try again"
-        confirm_btn_approve = "Done"
-        confirm_btn_update = "Resend"
-        confirm_btn_cancel = "Cancel"
         
     photo = update.message.photo[-1]
 
@@ -129,6 +170,8 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
+    user = get_user(telegram_id)
+
     if language == "ru":
         error_text = "Что-то пошло не так. Пожалуйста, попробуйте еще раз"
         access_error_text = "Доступ к нейросети из Вашего региона недоступен. Попробуйте включить VPN или отключите (настройте) раздельное туннелирование."
@@ -136,24 +179,42 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
         error_text = "Something went wrong. Please try again" 
         access_error_text = "Access to the neural network from your region is not available. Try enabling VPN or disabling (configuring) split tunneling."
 
-    keyboard = [
+    keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("Назад в меню", callback_data="menu_back")
+            InlineKeyboardButton(
+                "Назад в меню",
+                callback_data="menu_back"
+            )
         ]
-    ]
+    ])
 
     if query.data == "confirm_btn_approve":
         image_bytes = context.user_data["meal_photo_bytes"]
         description = context.user_data["meal_description"]
+        meal_type = context.user_data["meal_type"]
+
+        user_token = user.fatsecret_token
+        user_token_secret = user.fatsecret_token_secret
 
         try:
-            ai_response = await asyncio.to_thread(
-                recognize_image,
-                image_bytes,
-                description,
-            )
+            recognized_meal = await recognize_meal(image_bytes, description, meal_type)
+
+            fatsecret_meal = await search_food(recognized_meal)
+
+            for food in fatsecret_meal["foods"]:
+                response = await asyncio.to_thread(
+                    fatsecret_create_entry,
+                    user_token = user_token,
+                    user_token_secret = user_token_secret,
+                    food_id = food["food_id"],
+                    food_entry_name = recognized_meal["meal_name"],
+                    serving_id = food["serving_id"],
+                    number_of_units = food["number_of_units"],
+                    meal = meal_type
+                )
 
         except Exception as error:
+            print(error)
             chat_id = update.effective_chat.id
 
             photo = BytesIO(image_bytes)
@@ -178,11 +239,12 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=keyboard
             )
             return WAITING_CONFIRM
+        
         await query.delete_message()
     
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text=ai_response,
+            text=response,
             reply_markup=keyboard
         )
         context.user_data.pop("meal_photo_bytes", None)

@@ -32,7 +32,7 @@ from handlers.menu import (
 )
 
 from handlers.photo import (
-    open_photo_flow,
+    start_proccess,
     process_photo,
     cancel_photo_flow,
     confirm_screen,
@@ -70,8 +70,12 @@ fatsecret_auth_conv = ConversationHandler(
 photo_process_conv = ConversationHandler(
     entry_points=[
         CallbackQueryHandler(
-            open_photo_flow,
+            start_proccess,
             pattern=r"^menu_photo$",
+        ),
+        CallbackQueryHandler(
+            start_proccess,
+            pattern=r"^meal_type-(breakfast|lunch|dinner|other)$",
         )
     ],
 
@@ -98,6 +102,10 @@ photo_process_conv = ConversationHandler(
         CallbackQueryHandler(
             cancel_photo_flow,
             pattern=r"^photo_cancel$",
+        ),
+        CallbackQueryHandler(
+            start_proccess,
+            pattern=r"^meal_cancel$",
         )
     ],
     allow_reentry=True,
