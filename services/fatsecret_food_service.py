@@ -42,7 +42,7 @@ def fatsecret_create_entry(
         serving_id = serving_id,
         number_of_units = number_of_units,
         meal = meal,
-        date = datetime.now(timezone.utc).isoformat(),
+        date = int(datetime.now().timestamp() // 86400)
     )
 
     return response

@@ -189,6 +189,7 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ])
 
     if query.data == "confirm_btn_approve":
+        await query.delete_message()
         image_bytes = context.user_data["meal_photo_bytes"]
         description = context.user_data["meal_description"]
         meal_type = context.user_data["meal_type"]
@@ -196,10 +197,15 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_token = user.fatsecret_token
         user_token_secret = user.fatsecret_token_secret
 
+        status_message = await update.message.reply_text("Анализирую фотографию...")
         try:
             recognized_meal = await recognize_meal(image_bytes, description, meal_type)
 
+            await status_message.edit_text("Блюдо распознано!\n Ищу подходящие продукты в FatSecret...")
+
             fatsecret_meal = await search_food(recognized_meal)
+
+            await status_message.edit_text("Блюдо распознано!\n Продукты найдены! \n Добавляю блюдо в FatSecret...")
 
             for food in fatsecret_meal["foods"]:
                 response = await asyncio.to_thread(
@@ -239,12 +245,10 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=keyboard
             )
             return WAITING_CONFIRM
-        
-        await query.delete_message()
     
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text=response,
+            text=f"Блюдо успешно добавлено!\n ID: {response["food_entry_id"]["value"]}",
             reply_markup=keyboard
         )
         context.user_data.pop("meal_photo_bytes", None)

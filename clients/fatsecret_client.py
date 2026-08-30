@@ -52,8 +52,13 @@ def exchange_verifier(consumer_key: str, consumer_secret: str, request_token: st
 
     return user_token, user_token_secret
 
-def food_search(query: str, consumer_key: str, consumer_secret:str) -> dict:
-    oauth = OAuth1Session(consumer_key, client_secret=consumer_secret, callback_uri="oob", signature_method=SIGNATURE_HMAC, signature_type=SIGNATURE_TYPE_BODY)
+def food_search(query: str, consumer_key: str, consumer_secret: str) -> dict:
+    oauth = OAuth1Session(
+        consumer_key,
+        client_secret=consumer_secret,
+        signature_method=SIGNATURE_HMAC,
+        signature_type=SIGNATURE_TYPE_QUERY,
+    )
 
     response = oauth.get(
         FOODS_SEARCH_URL,
@@ -65,11 +70,15 @@ def food_search(query: str, consumer_key: str, consumer_secret:str) -> dict:
     )
 
     response.raise_for_status()
-
     return response.json()
 
-def get_food( food_id: int, consumer_key: str, consumer_secret: str) -> dict:
-    oauth = OAuth1Session(consumer_key, client_secret=consumer_secret, callback_uri="oob", signature_method=SIGNATURE_HMAC, signature_type=SIGNATURE_TYPE_BODY)
+def get_food(food_id: int, consumer_key: str, consumer_secret: str) -> dict:
+    oauth = OAuth1Session(
+        consumer_key,
+        client_secret=consumer_secret,
+        signature_method=SIGNATURE_HMAC,
+        signature_type=SIGNATURE_TYPE_QUERY,
+    )
 
     response = oauth.get(
         FOOD_GET_URL,
@@ -80,7 +89,6 @@ def get_food( food_id: int, consumer_key: str, consumer_secret: str) -> dict:
     )
 
     response.raise_for_status()
-
     return response.json()
 
 def create_food_entry(
@@ -99,7 +107,6 @@ def create_food_entry(
     oauth = OAuth1Session(
         consumer_key, 
         client_secret=consumer_secret, 
-        callback_uri="oob", 
         signature_method=SIGNATURE_HMAC, 
         signature_type=SIGNATURE_TYPE_BODY, 
         resource_owner_key=user_token,

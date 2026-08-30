@@ -51,7 +51,4 @@ def gemini_search_food(recognized_meal: dict):
             ],
         ),
     )
-
-    print(interaction)
-
-    return interaction.output_text
+    return interaction.text
