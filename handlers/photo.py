@@ -286,13 +286,11 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     meal = meal_type
                 )
                 entries_resposnes.append(response["status"])
-
             
-
-            if "error" in entries_resposnes:
+            if "error" in entries_resposnes and "success" in entries_resposnes:
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text=error_entry
+                    text=error_half
                 )
 
                 context.user_data.pop("meal_photo_bytes", None)
@@ -300,11 +298,11 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context.user_data.pop("meal_description", None)
 
                 return ConversationHandler.END
-            
-            elif "error" in entries_resposnes and "success" in entries_resposnes:
+        
+            elif "error" in entries_resposnes:
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text=error_half
+                    text=error_entry
                 )
 
                 context.user_data.pop("meal_photo_bytes", None)
