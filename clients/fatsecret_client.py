@@ -7,17 +7,31 @@ from oauthlib.oauth1 import (
 )
 from urllib.parse import parse_qs
 
-REQUEST_TOKEN_URL = (
-    "https://authentication.fatsecret.com/oauth/request_token"
-)
+REQUEST_TOKEN_URL = "https://authentication.fatsecret.com/oauth/request_token"
 
-AUTHORIZATION_URL = (
-    "https://authentication.fatsecret.com/oauth/authorize"
-)
+AUTHORIZATION_URL = "https://authentication.fatsecret.com/oauth/authorize"
 
-ACCESS_TOKEN_URL = (
-    "https://authentication.fatsecret.com/oauth/access_token"
-)
+ACCESS_TOKEN_URL = "https://authentication.fatsecret.com/oauth/access_token"
+
+FOODS_SEARCH_URL = "https://platform.fatsecret.com/rest/foods/search/v1"
+
+FOOD_GET_URL = "https://platform.fatsecret.com/rest/food/v5"
+
+FOOD_ENTRIES_URL = "https://platform.fatsecret.com/rest/food-entries/v1"
+
+def _parse_fatsecret_response(response) -> dict:
+    response.raise_for_status()
+
+    data = response.json()
+
+    if "error" in data:
+        error_data = data["error"]
+        raise RuntimeError(
+            f"FatSecret API error {error_data.get('code')}: "
+            f"{error_data.get('message')}"
+        )
+
+    return data
 
 def create_authorization(consumer_key: str, consumer_secret: str) -> tuple[str, str, str]:
     oauth = OAuth1Session(consumer_key, client_secret=consumer_secret, callback_uri="oob", signature_method=SIGNATURE_HMAC, signature_type=SIGNATURE_TYPE_BODY)
@@ -52,4 +66,78 @@ def exchange_verifier(consumer_key: str, consumer_secret: str, request_token: st
 
     return user_token, user_token_secret
 
+def food_search(query: str, consumer_key: str, consumer_secret: str) -> dict:
+    oauth = OAuth1Session(
+        consumer_key,
+        client_secret=consumer_secret,
+        signature_method=SIGNATURE_HMAC,
+        signature_type=SIGNATURE_TYPE_QUERY,
+    )
 
+    response = oauth.get(
+        FOODS_SEARCH_URL,
+        params={
+            "search_expression": query,
+            "format": "json",
+            "max_results": 10,
+        },
+    )
+
+    return _parse_fatsecret_response(response)
+
+def get_food(food_id: int, consumer_key: str, consumer_secret: str) -> dict:
+    oauth = OAuth1Session(
+        consumer_key,
+        client_secret=consumer_secret,
+        signature_method=SIGNATURE_HMAC,
+        signature_type=SIGNATURE_TYPE_QUERY,
+    )
+
+    response = oauth.get(
+        FOOD_GET_URL,
+        params={
+            "food_id": food_id,
+            "format": "json",
+        },
+    )
+
+    return _parse_fatsecret_response(response)
+ 
+
+def create_food_entry(
+        consumer_key: str,
+        consumer_secret: str,
+        user_token: str,
+        user_token_secret: str,
+        food_id: int | str,
+        food_entry_name: str,
+        serving_id: int | str,
+        number_of_units: float,
+        meal: str,
+        date: int,
+    ) -> dict:
+
+    oauth = OAuth1Session(
+        consumer_key, 
+        client_secret=consumer_secret, 
+        signature_method=SIGNATURE_HMAC, 
+        signature_type=SIGNATURE_TYPE_BODY, 
+        resource_owner_key=user_token,
+        resource_owner_secret=user_token_secret
+        )
+
+
+    response = oauth.post(
+        FOOD_ENTRIES_URL,
+        data={
+            "food_id": food_id,
+            "food_entry_name": food_entry_name,
+            "serving_id": serving_id,
+            "number_of_units": number_of_units,
+            "meal": meal,
+            "date": date,
+            "format": "json",
+        },
+    )
+
+    return _parse_fatsecret_response(response)
