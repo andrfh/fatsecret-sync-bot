@@ -184,6 +184,7 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
         analyze_not_food = "ИИ не обнаружил на фотографии еду."
         analyze_too_complex = "На фотографии изображено слишком много блюд."
         analyze_uncertain = "Фотография слишком плохого качества."
+        back_to_menu = "Назад в меню"        
 
     elif language == "en":
         error_text = "Something went wrong. Please try again" 
@@ -197,11 +198,12 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
         analyze_not_food = "The AI ​​did not detect any food in the photo."
         analyze_too_complex = "There are too many dishes in the photo."
         analyze_uncertain = "The photo quality is too poor."
+        back_to_menu = "Back to menu"
 
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
-                "Назад в меню",
+                back_to_menu,
                 callback_data="menu_back"
             )
         ]
