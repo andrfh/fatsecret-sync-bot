@@ -174,10 +174,29 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if language == "ru":
         error_text = "Что-то пошло не так. Пожалуйста, попробуйте еще раз"
+        error_entry = "Ошибка FatSecret. Блюда не были добавлены. Попробуйте добавить заново"
+        error_half = "Ошибка FatSecret. Часть блюда не были добавлены."
         access_error_text = "Доступ к нейросети из Вашего региона недоступен. Попробуйте включить VPN или отключите (настройте) раздельное туннелирование."
+        analyze_step1 = "⏳ Анализирую фотографию..."
+        analyze_step2 = "✅ Блюдо распознано!\n⏳ Ищу подходящие продукты в FatSecret..."
+        analyze_step3 = "✅ Блюдо распознано!\n✅ Продукты найдены! \n⏳ Добавляю блюдо в FatSecret..."
+        analyze_ready = "✅ Блюдо успешно добавлено!"
+        analyze_not_food = "ИИ не обнаружил на фотографии еду."
+        analyze_too_complex = "На фотографии изображено слишком много блюд."
+        analyze_uncertain = "Фотография слишком плохого качества."
+
     elif language == "en":
         error_text = "Something went wrong. Please try again" 
+        error_entry = "FatSecret error. Items were not added. Please try adding them again."
+        error_half = "FatSecret error. Some items were not added."
         access_error_text = "Access to the neural network from your region is not available. Try enabling VPN or disabling (configuring) split tunneling."
+        analyze_step1 = "⏳ Analyzing the photo..."
+        analyze_step2 = "✅ Dish recognized!\n⏳ Searching for matching items in FatSecret..."
+        analyze_step3 = "✅ Dish recognized!\n✅ Items found! \n⏳ Adding the dish to FatSecret..."
+        analyze_ready = "✅ Dish successfully added!"
+        analyze_not_food = "The AI ​​did not detect any food in the photo."
+        analyze_too_complex = "There are too many dishes in the photo."
+        analyze_uncertain = "The photo quality is too poor."
 
     keyboard = InlineKeyboardMarkup([
         [
@@ -201,7 +220,7 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         status_message = await context.bot.send_message(
             chat_id=chat_id,
-            text="⏳ Анализирую фотографию..."
+            text= analyze_step1
         )
         try:
             recognized_meal = await recognize_meal(image_bytes, description, meal_type)
@@ -210,7 +229,7 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if recognized_meal["status"] == "not_food":
                 await status_message.edit_text(
-                    "ИИ не обнаружил на фотографии еду.",
+                    analyze_not_food,
                     reply_markup=keyboard
                 )
 
@@ -222,7 +241,7 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             elif recognized_meal["status"] == "too_complex":
                 await status_message.edit_text(
-                    "На фотографии изображено слишком много блюд.",
+                    analyze_too_complex,
                     reply_markup=keyboard
                 )
 
@@ -234,7 +253,7 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             elif recognized_meal["status"] == "uncertain":
                 await status_message.edit_text(
-                    "Фотография слишком плохого качества.",
+                    analyze_uncertain,
                     reply_markup=keyboard
                 )
 
@@ -245,13 +264,15 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return ConversationHandler.END
 
 
-            await status_message.edit_text("✅ Блюдо распознано!\n⏳ Ищу подходящие продукты в FatSecret...")
+            await status_message.edit_text(analyze_step2)
 
             fatsecret_meal = await search_food(recognized_meal, language)
 
             print(fatsecret_meal)
 
-            await status_message.edit_text("✅ Блюдо распознано!\n✅Продукты найдены! \n⏳ Добавляю блюдо в FatSecret...")
+            await status_message.edit_text(analyze_step3)
+
+            entries_resposnes = []
 
             for food in fatsecret_meal["foods"]:
                 response = await asyncio.to_thread(
@@ -264,6 +285,33 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     number_of_units = food["number_of_units"],
                     meal = meal_type
                 )
+                entries_resposnes.append(response["status"])
+
+            
+
+            if "error" in entries_resposnes:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=error_entry
+                )
+
+                context.user_data.pop("meal_photo_bytes", None)
+                context.user_data.pop("meal_photo_file_id", None)
+                context.user_data.pop("meal_description", None)
+
+                return ConversationHandler.END
+            
+            elif "error" in entries_resposnes and "success" in entries_resposnes:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=error_half
+                )
+
+                context.user_data.pop("meal_photo_bytes", None)
+                context.user_data.pop("meal_photo_file_id", None)
+                context.user_data.pop("meal_description", None)
+
+                return ConversationHandler.END
 
         except Exception as error:
             print(error)
@@ -291,7 +339,7 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return WAITING_CONFIRM
     
         await status_message.edit_text(
-            f"✅ Блюдо успешно добавлено!",
+            analyze_ready,
             reply_markup=keyboard
         )
 

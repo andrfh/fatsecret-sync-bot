@@ -9,8 +9,6 @@ from clients.fatsecret_client import food_search
 from clients.fatsecret_client import get_food
 from clients.fatsecret_client import create_food_entry
 
-from repositories.user_repository import save_fatsecret_credentials
-
 FATSECRET_CONSUMER_KEY = os.getenv("FATSECRET_CONSUMER_KEY")
 FATSECRET_CONSUMER_SECRET = os.getenv("FATSECRET_CONSUMER_SECRET")
 
@@ -37,19 +35,24 @@ def fatsecret_create_entry(
 
     date_int = (today - epoch).days
 
-    response = create_food_entry(
-        consumer_key = FATSECRET_CONSUMER_KEY,
-        consumer_secret = FATSECRET_CONSUMER_SECRET,
-        user_token = user_token,
-        user_token_secret = user_token_secret,
-        food_id = food_id,
-        food_entry_name = food_entry_name,
-        serving_id = serving_id,
-        number_of_units = number_of_units,
-        meal = meal,
-        date = date_int
-    )
+    try:
+        response = create_food_entry(
+            consumer_key = FATSECRET_CONSUMER_KEY,
+            consumer_secret = FATSECRET_CONSUMER_SECRET,
+            user_token = user_token,
+            user_token_secret = user_token_secret,
+            food_id = food_id,
+            food_entry_name = food_entry_name,
+            serving_id = serving_id,
+            number_of_units = number_of_units,
+            meal = meal,
+            date = date_int
+        )
+        return {"status": "success", "response": response}
+    
+    except Exception as error:
+        return {"status": "error", "response": error}
 
-    return response
+        
 
 
