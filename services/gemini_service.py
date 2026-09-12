@@ -2,8 +2,16 @@ import asyncio
 import json
 import math
 
+from pydantic import ValidationError
+
 from clients.gemini_client import gemini_search_food
 from clients.gemini_client import recognize_image
+from clients.gemini_client import verify_recognition
+from models.Meal import MealKind, MealRecognition, MealStatus
+
+# Re-run the recognition through a verifier pass only when the first result is a
+# multi-food plate detailed enough that an over-decomposition is plausible.
+_VERIFY_MIN_ITEMS = 4
 
 
 def _parse_json_object(ai_response: str, response_name: str) -> dict:
@@ -20,10 +28,6 @@ def _parse_json_object(ai_response: str, response_name: str) -> dict:
 
 def _is_non_empty_string(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
-
-
-def _is_valid_brand(value: object) -> bool:
-    return value is None or _is_non_empty_string(value)
 
 
 def _is_positive_integer(value: object) -> bool:
@@ -45,54 +49,37 @@ def _is_positive_id(value: object) -> bool:
     return isinstance(value, str) and value.isdigit() and int(value) > 0
 
 
+def _needs_verification(meal: MealRecognition) -> bool:
+    return (
+        meal.status is MealStatus.ok
+        and meal.meal_kind is MealKind.composite_plate
+        and len(meal.items) >= _VERIFY_MIN_ITEMS
+    )
+
+
 async def recognize_meal(
     image_bytes: bytes,
     description: str,
     meal_type: str,
 ) -> dict:
-    allowed_statuses = {"ok", "not_food", "too_complex", "uncertain"}
+    try:
+        meal = await asyncio.to_thread(
+            recognize_image,
+            image_bytes,
+            description,
+            meal_type,
+        )
 
-    ai_response = await asyncio.to_thread(
-        recognize_image,
-        image_bytes,
-        description,
-        meal_type,
-    )
+        if _needs_verification(meal):
+            meal = await asyncio.to_thread(
+                verify_recognition,
+                image_bytes,
+                meal.to_payload(),
+            )
+    except ValidationError as error:
+        raise ValueError("AI returned an invalid meal recognition response") from error
 
-    meal_data = _parse_json_object(ai_response, "meal recognition")
-    status = meal_data.get("status")
-
-    if status not in allowed_statuses:
-        raise ValueError("AI returned an unsupported meal status")
-
-    if status != "ok":
-        return meal_data
-
-    if not _is_non_empty_string(meal_data.get("meal_name")):
-        raise ValueError("AI returned an invalid meal name")
-
-    if "brand" not in meal_data or not _is_valid_brand(meal_data["brand"]):
-        raise ValueError("AI returned an invalid meal brand")
-
-    items = meal_data.get("items")
-
-    if not isinstance(items, list) or not 1 <= len(items) <= 8:
-        raise ValueError("AI returned an invalid meal items list")
-
-    for item in items:
-        if not isinstance(item, dict):
-            raise ValueError("AI returned an invalid meal item")
-
-        if not _is_non_empty_string(item.get("name")):
-            raise ValueError("AI returned an invalid meal item name")
-
-        if "brand" not in item or not _is_valid_brand(item["brand"]):
-            raise ValueError("AI returned an invalid meal item brand")
-
-        if not _is_positive_integer(item.get("amount_g")):
-            raise ValueError("AI returned an invalid meal item amount")
-
-    return meal_data
+    return meal.to_payload()
 
 
 async def search_food(recognized_meal: dict, language: str) -> dict:

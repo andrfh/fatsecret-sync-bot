@@ -125,8 +125,8 @@ async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif language == "en":
         no_description_text = "No description"
 
-    description = update.message.caption or no_description_text
-    safe_description = escape(description)
+    description = update.message.caption or ""
+    safe_description = escape(description or no_description_text)
 
     if language == "ru":
         confirm_text = f"Подтвердите правильность запроса:\nОписание: <i>{safe_description}</i>"
