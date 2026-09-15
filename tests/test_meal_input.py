@@ -29,6 +29,7 @@ with patch('dotenv.load_dotenv'), patch.dict(os.environ, {'GEMINI_API_KEY': 'off
     from handlers import fatsecret_auth
     from clients import gemini_client, fatsecret_client
     from services import gemini_service
+    from services.usage_service import UsageResult
     from promtps.Gemini_photo_recognized import create_photo_prompt
 
 
@@ -51,6 +52,9 @@ class MealTestSupport:
         self.enterContext(patch('builtins.print'))
         self.user = SimpleNamespace(language='ru', fatsecret_token='test-token', fatsecret_token_secret='test-secret')
         self.enterContext(patch.object(photo, 'get_user', return_value=self.user))
+        self.consume_attempt = self.enterContext(patch.object(
+            photo, 'consume_meal_attempt', return_value=UsageResult(True, False, 4)
+        ))
         for module in ('handlers.start', 'handlers.menu', 'handlers.settings', 'handlers.language', 'handlers.fatsecret_auth'):
             self.enterContext(patch.object(importlib.import_module(module), 'get_user', return_value=self.user))
         self.bot = AsyncMock(spec=ExtBot)

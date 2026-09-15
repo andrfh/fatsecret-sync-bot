@@ -8,6 +8,7 @@ LANGUAGE_PROMPT = "Выберите язык / Choose your language:"
 
 TEXTS = {
     "ru": {
+        "daily_limit_reached": "На сегодня лимит добавлений исчерпан. Попробуйте снова завтра.\n\nФото, описание и приём пищи сохранены.",
         "service_retry": "Сервис анализа временно перегружен. Подожду и повторю запрос автоматически: попытка {attempt} из {total}.",
         "service_busy": "Сервис анализа временно перегружен или достигнут лимит запросов. Автоматические повторы не помогли. В FatSecret ничего не записано.\n\nФото, описание и приём пищи сохранены. Попробуйте позже кнопкой «Распознать и добавить» или отмените добавление.",
         "add": "Добавить еду", "menu_button": "Главное меню", "settings_button": "Настройки",
@@ -53,6 +54,7 @@ TEXTS = {
         "user_error": "Не удалось загрузить профиль. Попробуйте открыть главное меню ещё раз.",
     },
     "en": {
+        "daily_limit_reached": "You have reached today's meal processing limit. Please try again tomorrow.\n\nYour photo, description and meal selection are preserved.",
         "service_retry": "The analysis service is temporarily busy. I will wait and retry automatically: attempt {attempt} of {total}.",
         "service_busy": "The analysis service is temporarily busy or its request limit has been reached. Automatic retries did not help. Nothing was saved to FatSecret.\n\nYour photo, description and meal selection are preserved. Try Recognize and add later, or cancel the meal.",
         "add": "Add meal", "menu_button": "Main menu", "settings_button": "Settings",
