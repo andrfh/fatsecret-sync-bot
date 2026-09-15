@@ -13,12 +13,13 @@ from telegram.ext import (
 
 from database.init_db import init_db
 
-from handlers.start import start 
+from handlers.start import start
 from handlers.language import select_language
 from handlers.fatsecret_auth import (
     start_fatsecret_auth,
     process_fatsecret_verifier,
     cancel_fatsecret_auth,
+    verifier_input_reminder,
     WAITING_VERIFIER
 )
 from handlers.settings import (
@@ -37,13 +38,20 @@ from handlers.photo import (
     cancel_photo_flow,
     confirm_screen,
     photo_exception,
+    select_meal_type,
+    meal_type_reminder,
+    confirm_reminder,
     WAITING_PHOTO,
+    WAITING_MEAL_TYPE,
     WAITING_CONFIRM
 )
 
 load_dotenv()
 
 telegram_api_key = os.getenv("TELEGRAM_API_KEY")
+
+meal_input_filter = (filters.PHOTO | filters.TEXT) & ~filters.COMMAND
+
 
 fatsecret_auth_conv = ConversationHandler(
     entry_points=[
@@ -57,7 +65,8 @@ fatsecret_auth_conv = ConversationHandler(
             MessageHandler(
                 filters.TEXT & ~filters.COMMAND,
                 process_fatsecret_verifier,
-            )
+            ),
+            MessageHandler(~filters.TEXT & ~filters.COMMAND, verifier_input_reminder),
         ]
     },
     fallbacks=[
@@ -73,42 +82,51 @@ photo_process_conv = ConversationHandler(
             start_proccess,
             pattern=r"^menu_photo$",
         ),
-        CallbackQueryHandler(
-            start_proccess,
-            pattern=r"^meal_type-(breakfast|lunch|dinner|other)$",
+        MessageHandler(
+            meal_input_filter,
+            process_photo,
         )
     ],
 
     states={
         WAITING_PHOTO: [
             MessageHandler(
-                filters.PHOTO,
+                meal_input_filter,
                 process_photo,
             ),
             MessageHandler(
-                ~filters.PHOTO & ~filters.COMMAND,
+                ~(filters.PHOTO | filters.TEXT) & ~filters.COMMAND,
                 photo_exception,
             )
+        ],
+
+        WAITING_MEAL_TYPE: [
+            CallbackQueryHandler(
+                select_meal_type,
+                pattern=r"^meal_type-(breakfast|lunch|dinner|other)$",
+            ),
+            MessageHandler(~filters.COMMAND, meal_type_reminder),
         ],
 
         WAITING_CONFIRM: [
             CallbackQueryHandler(
                 confirm_screen,
                 pattern=r"^confirm_btn_(approve|update|cancel)$",
-            )
+            ),
+            MessageHandler(~filters.COMMAND, confirm_reminder),
         ],
     },
     fallbacks=[
         CallbackQueryHandler(
             cancel_photo_flow,
-            pattern=r"^photo_cancel$",
+            pattern=r"^(photo_cancel|meal_cancel)$",
         ),
         CallbackQueryHandler(
             start_proccess,
-            pattern=r"^meal_cancel$",
+            pattern=r"^menu_photo$",
         )
     ],
-    allow_reentry=True,
+    allow_reentry=False,
     name="photo_process_conversation",
 )
 
@@ -166,8 +184,8 @@ def main() -> None:
             pattern=r"^settings_disconnect_(confirm|cancel)$",
         )
     )
+
     app.add_handler(fatsecret_auth_conv)
-    
     app.add_handler(photo_process_conv)
 
     app.run_polling()

@@ -16,26 +16,35 @@ load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+# Limit built-in retries; gemini_service manages stage retries and progress.
+# In this SDK, Models treats 1 as one attempt, while Interactions permits
+# one additional internal retry. The service budget counts SDK calls.
+client = genai.Client(api_key=GEMINI_API_KEY, http_options=types.HttpOptions(
+    retry_options=types.HttpRetryOptions(attempts=1),
+))
 
 Gemini_model = "gemini-3.1-flash-lite"
 
-def recognize_image(image_bytes: bytes, description: str, meal_type: str) -> str:
-    encoded = base64.b64encode(image_bytes).decode("utf-8")
+def recognize_image(image_bytes: bytes | None, description: str, meal_type: str) -> str:
+    if not image_bytes and not description.strip():
+        raise ValueError("A meal photo or description is required")
+
+    input_parts = []
+    if image_bytes:
+        encoded = base64.b64encode(image_bytes).decode("utf-8")
+        input_parts.append({
+            "type": "image",
+            "data": encoded,
+            "mime_type": "image/jpeg",
+        })
+    input_parts.append({
+        "type": "text",
+        "text": create_photo_prompt(description, has_image=bool(image_bytes)),
+    })
 
     interaction = client.interactions.create(
         model=Gemini_model,
-        input=[
-            {
-                "type": "image",
-                "data": encoded,
-                "mime_type": "image/jpeg",
-            },
-            {
-                "type": "text",
-                "text": create_photo_prompt(description)
-            },
-        ],
+        input=input_parts,
     )
 
     return interaction.output_text

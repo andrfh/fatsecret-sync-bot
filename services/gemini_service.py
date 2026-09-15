@@ -1,9 +1,55 @@
 import asyncio
 import json
 import math
+import logging
+import random
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+from google.genai.errors import APIError
 
 from clients.gemini_client import gemini_search_food
 from clients.gemini_client import recognize_image
+
+
+logger = logging.getLogger(__name__)
+
+
+class GeminiTemporarilyUnavailable(Exception):
+    """The read-only Gemini operation could not finish within the retry budget."""
+
+
+async def _request_with_retry(operation, *args, on_retry=None):
+    for attempt in range(1, 4):
+        try:
+            return await asyncio.to_thread(operation, *args)
+        except APIError as error:
+            if error.code not in (429, 503):
+                raise
+            if attempt == 3:
+                logger.warning("Gemini %s still returned %s after 3 attempts",
+                               operation.__name__, error.code)
+                raise GeminiTemporarilyUnavailable() from error
+            delay = 2 ** attempt + random.uniform(0, 1)
+            headers = getattr(error.response, "headers", {}) or {}
+            try:
+                retry_after = float(headers.get("Retry-After", 0))
+            except (TypeError, ValueError):
+                try:
+                    retry_after = (parsedate_to_datetime(headers["Retry-After"])
+                                   - datetime.now(timezone.utc)).total_seconds()
+                except (KeyError, TypeError, ValueError, OverflowError):
+                    retry_after = 0
+            # Do not retry earlier than requested, or keep the chat waiting indefinitely.
+            if retry_after > 60:
+                raise GeminiTemporarilyUnavailable() from error
+            if not math.isfinite(retry_after):
+                retry_after = 0
+            delay = max(delay, retry_after)
+            logger.warning("Gemini %s returned %s; retry %s/3 in %.1fs",
+                           operation.__name__, error.code, attempt + 1, delay)
+            if on_retry is not None:
+                await on_retry(attempt + 1, 3)
+            await asyncio.sleep(delay)
 
 
 def _parse_json_object(ai_response: str, response_name: str) -> dict:
@@ -46,17 +92,19 @@ def _is_positive_id(value: object) -> bool:
 
 
 async def recognize_meal(
-    image_bytes: bytes,
+    image_bytes: bytes | None,
     description: str,
     meal_type: str,
+    *, on_retry=None,
 ) -> dict:
     allowed_statuses = {"ok", "not_food", "too_complex", "uncertain"}
 
-    ai_response = await asyncio.to_thread(
+    ai_response = await _request_with_retry(
         recognize_image,
         image_bytes,
         description,
         meal_type,
+        on_retry=on_retry,
     )
 
     meal_data = _parse_json_object(ai_response, "meal recognition")
@@ -95,13 +143,14 @@ async def recognize_meal(
     return meal_data
 
 
-async def search_food(recognized_meal: dict, language: str) -> dict:
+async def search_food(recognized_meal: dict, language: str, *, on_retry=None) -> dict:
     allowed_resolutions = {"components", "whole_meal"}
 
-    ai_response = await asyncio.to_thread(
+    ai_response = await _request_with_retry(
         gemini_search_food,
         recognized_meal,
         language,
+        on_retry=on_retry,
     )
 
     food_data = _parse_json_object(ai_response, "food resolution")
