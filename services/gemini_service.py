@@ -3,6 +3,9 @@ import json
 import math
 import logging
 import random
+import ssl
+import httpx
+import requests
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from google.genai.errors import APIError
@@ -18,19 +21,44 @@ class GeminiTemporarilyUnavailable(Exception):
     """The read-only Gemini operation could not finish within the retry budget."""
 
 
+_TRANSIENT_NETWORK_ERRORS = (
+    ssl.SSLError,
+    TimeoutError,
+    ConnectionError,
+    httpx.TransportError,
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+)
+
+
+def _is_transient_gemini_error(error: Exception) -> bool:
+    current = error
+    visited = set()
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        if isinstance(current, APIError):
+            return current.code in (429, 503)
+        if isinstance(current, _TRANSIENT_NETWORK_ERRORS):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
 async def _request_with_retry(operation, *args, on_retry=None):
     for attempt in range(1, 4):
         try:
             return await asyncio.to_thread(operation, *args)
-        except APIError as error:
-            if error.code not in (429, 503):
+        except Exception as error:
+            if not _is_transient_gemini_error(error):
                 raise
+            error_label = error.code if isinstance(error, APIError) else type(error).__name__
             if attempt == 3:
                 logger.warning("Gemini %s still returned %s after 3 attempts",
-                               operation.__name__, error.code)
+                               operation.__name__, error_label)
                 raise GeminiTemporarilyUnavailable() from error
             delay = 2 ** attempt + random.uniform(0, 1)
-            headers = getattr(error.response, "headers", {}) or {}
+            response = getattr(error, "response", None)
+            headers = getattr(response, "headers", {}) or {}
             try:
                 retry_after = float(headers.get("Retry-After", 0))
             except (TypeError, ValueError):
@@ -46,7 +74,7 @@ async def _request_with_retry(operation, *args, on_retry=None):
                 retry_after = 0
             delay = max(delay, retry_after)
             logger.warning("Gemini %s returned %s; retry %s/3 in %.1fs",
-                           operation.__name__, error.code, attempt + 1, delay)
+                           operation.__name__, error_label, attempt + 1, delay)
             if on_retry is not None:
                 await on_retry(attempt + 1, 3)
             await asyncio.sleep(delay)

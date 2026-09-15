@@ -21,6 +21,7 @@ from services.gemini_service import recognize_meal
 from services.gemini_service import search_food
 from services.gemini_service import GeminiTemporarilyUnavailable
 from services.fatsecret_food_service import fatsecret_create_entry
+from services.usage_service import consume_meal_attempt
 
 WAITING_PHOTO = 1
 WAITING_CONFIRM = 2
@@ -242,6 +243,14 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.warning("Could not update Gemini retry status in Telegram")
 
         try:
+            usage = await asyncio.to_thread(consume_meal_attempt, telegram_id)
+            if not usage.allowed:
+                await status_message.edit_text(
+                    text(language, "daily_limit_reached"),
+                    reply_markup=build_confirm_keyboard(language),
+                )
+                return WAITING_CONFIRM
+
             recognized_meal = await recognize_meal(image_bytes, description, meal_type, on_retry=report_retry)
 
             print(recognized_meal)

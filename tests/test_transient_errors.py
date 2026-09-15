@@ -1,5 +1,6 @@
 """Offline regressions for Gemini overload and Telegram callback failures."""
 import json
+import ssl
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -28,6 +29,7 @@ class TransientErrorTests(meal_tests.MealTestSupport, unittest.IsolatedAsyncioTe
         for stage in ('recognition', 'search'):
             for code in (429, 503):
                 with self.subTest(stage=stage, code=code):
+                    self.consume_attempt.reset_mock()
                     self.api.reset_mock(side_effect=True)
                     self.api.interactions.create.return_value = SimpleNamespace(output_text=json.dumps(meal_tests.MEAL))
                     self.api.models.generate_content.return_value = SimpleNamespace(text=json.dumps(meal_tests.FOODS))
@@ -43,7 +45,44 @@ class TransientErrorTests(meal_tests.MealTestSupport, unittest.IsolatedAsyncioTe
                     self.assertEqual(other.call_count, 1)
                     self.assertEqual([c.args[0] for c in self.sleep.await_args_list], [2, 4])
                     self.oauth.post.assert_called_once()
+                    self.consume_attempt.assert_called_once_with(1)
                     self.assert_clean()
+
+    async def test_ssl_eof_retries_each_gemini_stage(self):
+        for stage in ('recognition', 'search'):
+            with self.subTest(stage=stage):
+                self.api.reset_mock(side_effect=True)
+                recognition = SimpleNamespace(output_text=json.dumps(meal_tests.MEAL))
+                search = SimpleNamespace(text=json.dumps(meal_tests.FOODS))
+                self.api.interactions.create.return_value = recognition
+                self.api.models.generate_content.return_value = search
+                self.set_entry_results(['success'])
+                self.oauth.post.reset_mock()
+                self.sleep.reset_mock()
+                operation = self.api.interactions.create if stage == 'recognition' else self.api.models.generate_content
+                operation.side_effect = [
+                    ssl.SSLEOFError(8, 'EOF occurred in violation of protocol'),
+                    recognition if stage == 'recognition' else search,
+                ]
+                await self.accept('text')
+                self.assertEqual(await self.confirm(), ConversationHandler.END)
+                self.assertEqual(operation.call_count, 2)
+                self.sleep.assert_awaited_once_with(2)
+                self.oauth.post.assert_called_once()
+
+    async def test_wrapped_ssl_error_is_detected_and_exhaustion_preserves_draft(self):
+        wrapped = RuntimeError('request failed')
+        wrapped.__cause__ = ssl.SSLEOFError(8, 'EOF occurred in violation of protocol')
+        self.api.interactions.create.side_effect = wrapped
+        await self.accept('photo')
+        saved = self.context.user_data.copy()
+        self.status.edit_text.reset_mock()
+        self.assertEqual(await self.confirm(), meal_tests.photo.WAITING_CONFIRM)
+        self.assertEqual(self.api.interactions.create.call_count, 3)
+        self.assertEqual(self.context.user_data, saved)
+        self.oauth.post.assert_not_called()
+        self.assertEqual(self.status.edit_text.await_args.args[0],
+                         meal_tests.ui_text('ru', 'service_busy'))
 
     async def test_exhaustion_preserves_draft_and_manual_retry_works(self):
         for language in ('ru', 'en'):
@@ -77,7 +116,8 @@ class TransientErrorTests(meal_tests.MealTestSupport, unittest.IsolatedAsyncioTe
                         self.assert_clean()
 
     async def test_permanent_error_and_invalid_json_are_not_retried(self):
-        for failure in (api_error(400), api_error(403), RuntimeError('Other failure')):
+        for failure in (api_error(400), api_error(403), RuntimeError('Other failure'),
+                        FileNotFoundError('local file missing')):
             self.api.interactions.create.reset_mock()
             self.api.interactions.create.side_effect = failure
             with self.assertRaises(type(failure)):
