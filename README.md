@@ -1,329 +1,101 @@
-# Technical Architecture
+# fatsecret-sync-bot
 
-> **Public-launch compliance blocker:** the published fatsecret Platform API terms do not explicitly
-> authorize sending even minimized fatsecret content to an independent AI processor. Obtain written
-> confirmation from fatsecret for the exact Gemini matching design before opening the bot to public
-> traffic. This repository does not treat the current integration as proof of permission.
+**English** | [Русский](README.ru.md)
 
-User-facing data handling and notices are documented in [PRIVACY.md](PRIVACY.md) and
-[TERMS.md](TERMS.md).
+`fatsecret-sync-bot` is a non-commercial Telegram bot that recognizes meals from photos or text,
+matches them with FatSecret foods, and adds confirmed items to a user's food diary.
 
-## 1. System Overview
+The bot is an independent project and is not affiliated with or endorsed by FatSecret, Google,
+or Telegram.
 
-The service is a Telegram bot that recognizes food from a photo, estimates calories and macros, and saves the confirmed meal to FatSecret.
+Current version: **1.0.0**
 
-Main flow:
+## What it does
 
-1. The user connects a FatSecret account.
-2. The user sends a meal photo.
-3. The backend sends the photo to an AI service.
-4. The AI service returns the meal name, weight, calories, protein, fat, and carbohydrates.
-5. The bot shows the result to the user.
-6. The user confirms or edits the result.
-7. The backend saves the meal to FatSecret.
+1. Connects a user's FatSecret account through OAuth 1.0.
+2. Accepts a photo, a captioned photo, or a text meal description.
+3. Uses Google Gemini to recognize the meal and estimate its components and weight.
+4. Matches recognized items with FatSecret foods and servings.
+5. Shows the selected products, portions, mass, and macros for review.
+6. Writes to FatSecret only after a separate final confirmation.
 
-The first version will use a simple modular monolith architecture.
+The interface is available in English and Russian. Regular users can perform four recognitions per
+day; premium users are not limited.
 
-```mermaid
-flowchart LR
-    User[Telegram User] --> Bot[Telegram Bot]
-    Bot --> Backend[Backend Application]
+## Stack
 
-    Backend --> DB[(PostgreSQL)]
-    Backend --> AI[AI Recognition API]
-    Backend --> FatSecret[FatSecret API]
+- Python and `python-telegram-bot`
+- Google Gemini API
+- FatSecret Platform API with OAuth 1.0
+- SQLite (`data/app.db`)
+- `systemd` on a VPS
+- GitHub Actions deployment from `main`
+
+## Local setup
+
+Python 3.11 or newer is recommended.
+
+```bash
+python -m venv .venv
 ```
 
----
+Activate the environment, then install the dependencies:
 
-## 2. System Components
-
-### Telegram Bot
-
-The Telegram bot is the user interface.
-
-It:
-
-* receives commands and meal photos;
-* shows recognition results;
-* allows the user to confirm or edit the meal;
-* shows authorization and synchronization errors.
-
-### Backend Application
-
-The backend contains the main application logic.
-
-It:
-
-* manages users;
-* downloads photos from Telegram;
-* sends photos to the AI service;
-* validates AI responses;
-* stores meal data;
-* connects users to FatSecret;
-* sends confirmed meals to FatSecret.
-
-### Database
-
-The database stores:
-
-* Telegram users;
-* FatSecret connection data;
-* meal recognition results;
-* synchronization status.
-
-### AI Recognition Service
-
-The AI service analyzes the meal photo and returns estimated food information and macros.
-
-The AI result is only an estimate. The user must confirm it before synchronization.
-
-### FatSecret Integration
-
-The FatSecret integration:
-
-* authorizes the user;
-* stores access tokens;
-* sends confirmed meal data to the user's food diary.
-
----
-
-## 3. ER Diagram
-
-```mermaid
-erDiagram
-    USER {
-        uuid id PK
-        bigint telegram_id UK
-        string username
-        datetime created_at
-    }
-
-    FATSECRET_CONNECTION {
-        uuid id PK
-        uuid user_id FK
-        text access_token
-        text access_secret
-        string status
-        datetime created_at
-    }
-
-    MEAL {
-        uuid id PK
-        uuid user_id FK
-        string telegram_file_id
-        string meal_name
-        decimal weight_grams
-        decimal calories
-        decimal protein
-        decimal fat
-        decimal carbohydrates
-        string status
-        datetime created_at
-    }
-
-    MEAL_ITEM {
-        uuid id PK
-        uuid meal_id FK
-        string name
-        decimal weight_grams
-        decimal calories
-        decimal protein
-        decimal fat
-        decimal carbohydrates
-    }
-
-    SYNC_ATTEMPT {
-        uuid id PK
-        uuid meal_id FK
-        string status
-        string external_entry_id
-        int attempt_number
-        text error_message
-        datetime created_at
-    }
-
-    USER ||--o| FATSECRET_CONNECTION : has
-    USER ||--o{ MEAL : creates
-    MEAL ||--o{ MEAL_ITEM : contains
-    MEAL ||--o{ SYNC_ATTEMPT : has
+```bash
+python -m pip install -r requirements.txt
 ```
 
-Possible meal statuses:
+Copy `.env.example` to `.env` and provide:
 
-```text
-processing
-waiting_for_confirmation
-confirmed
-recognition_failed
-sync_failed
-synced
-cancelled
+```dotenv
+TELEGRAM_API_KEY=
+GEMINI_API_KEY=
+FATSECRET_CONSUMER_KEY=
+FATSECRET_CONSUMER_SECRET=
 ```
 
----
+Start the bot with:
 
-## 4. Integrations
-
-### Telegram Bot API
-
-Used to:
-
-* receive messages and photos;
-* download meal images;
-* send messages and buttons.
-
-### AI Recognition API
-
-Used to analyze a photo and return structured data:
-
-```json
-{
-  "meal_name": "Chicken with rice",
-  "items": [
-    {
-      "name": "Chicken breast",
-      "weight_grams": 150,
-      "calories": 248,
-      "protein": 46.5,
-      "fat": 5.4,
-      "carbohydrates": 0
-    }
-  ]
-}
+```bash
+python app.py
 ```
 
-The backend must validate the response before saving it.
+The SQLite directory and schema are created automatically. The bot uses Telegram long polling.
 
-### FatSecret API
+## Tests
 
-Used to:
+The local suite uses synthetic data and mocks; it does not call Telegram, Gemini, or FatSecret.
 
-* authorize the user;
-* connect the FatSecret account;
-* add confirmed meals to the food diary.
-
----
-
-## 5. Tech Stack
-
-Proposed MVP stack:
-
-* **Python** — backend language;
-* **aiogram** — Telegram bot framework;
-* **FastAPI** — FatSecret callback and health endpoint;
-* **PostgreSQL** — database;
-* **SQLAlchemy** — database access;
-* **Alembic** — database migrations;
-* **Pydantic** — data validation;
-* **httpx** — external API requests;
-* **pytest** — tests;
-* **Docker Compose** — local development.
-
-The exact AI provider will be selected separately.
-
----
-
-## 6. Error Handling
-
-The application should handle these main errors:
-
-### Invalid user input
-
-Examples:
-
-* message without a photo;
-* unsupported file;
-* invalid edited values.
-
-The bot should explain the problem and allow the user to try again.
-
-### AI errors
-
-Examples:
-
-* request timeout;
-* invalid response;
-* food was not recognized;
-* API rate limit.
-
-The meal should receive the `recognition_failed` status.
-
-### FatSecret errors
-
-Examples:
-
-* authorization failed;
-* token is invalid;
-* API is unavailable;
-* synchronization request failed.
-
-Temporary errors may be retried several times. Each attempt should be stored in the database.
-
-The system must prevent the same meal from being added to FatSecret more than once.
-
----
-
-## 7. Security
-
-The application must not store secrets in the source code.
-
-Secrets should be stored in environment variables:
-
-```text
-TELEGRAM_BOT_TOKEN
-FATSECRET_CONSUMER_KEY
-FATSECRET_CONSUMER_SECRET
-AI_API_KEY
-DATABASE_URL
-TOKEN_ENCRYPTION_KEY
+```bash
+python -m unittest discover -s tests
 ```
 
-Security rules:
+## Data and safety
 
-* do not commit the `.env` file;
-* do not log API keys or access tokens;
-* encrypt FatSecret tokens in the database;
-* never ask users to send their FatSecret password to the bot;
-* check that every meal belongs to the current Telegram user;
-* validate all data from users and external APIs;
-* delete temporary image files after processing.
+Meal photos, descriptions, Gemini responses, and full FatSecret responses are not stored
+permanently. SQLite stores account settings, FatSecret OAuth credentials, daily usage counters,
+and short write-operation markers. Meal drafts expire after 30 minutes.
 
----
+Diary writes are protected against duplicate clicks. FatSecret POST requests are not retried
+automatically; an uncertain response blocks replay and asks the user to check the diary.
 
-## 8. Deployment
+Recognition and nutrition estimates may be inaccurate and are not medical advice.
 
-For local development, Docker Compose will run:
+## Documentation
 
-```text
-Application
-PostgreSQL
-```
+- [Privacy Policy](PRIVACY.md)
+- [Terms of Use](TERMS.md)
+- [VPS deployment](docs/VPS_DEPLOYMENT.md)
+- [Matching evaluation](docs/MATCHING_EVALUATION.md)
+- [Changelog](CHANGELOG.md)
 
-```mermaid
-flowchart LR
-    Developer[Developer Computer] --> App[Application Container]
-    App --> DB[(PostgreSQL Container)]
-    App --> Telegram[Telegram API]
-    App --> AI[AI API]
-    App --> FatSecret[FatSecret API]
-```
+> **Public-launch requirement:** obtain written confirmation from FatSecret before scaling the bot
+> publicly. The current FatSecret Platform API terms do not explicitly authorize sending even
+> minimized FatSecret content to an independent AI processor.
 
-For the MVP, the production version may run on one VPS or container hosting platform.
+[Powered by fatsecret Platform API](https://platform.fatsecret.com)
 
-Production requires:
+## License
 
-* one application container;
-* PostgreSQL;
-* environment variables;
-* HTTPS for callback endpoints;
-* application logs;
-* database migrations.
-
-A simple health endpoint can be used:
-
-```text
-GET /health
-```
-
-The MVP does not require microservices, Kubernetes, message queues, or complex monitoring.
+Released under the [MIT License](LICENSE). The project itself is developed and operated on a
+non-commercial basis; the MIT license does not restrict third-party commercial reuse.

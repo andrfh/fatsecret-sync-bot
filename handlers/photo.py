@@ -22,6 +22,7 @@ from repositories.user_repository import get_user
 from handlers.menu import build_main_menu
 from handlers.start import start
 from ui.texts import text
+from config import DAILY_MEAL_ATTEMPT_LIMIT
 
 from services.gemini_service import recognize_meal
 from services.gemini_service import search_food
@@ -125,6 +126,20 @@ def _menu_keyboard(language: str) -> InlineKeyboardMarkup:
     ]])
 
 
+def _with_usage_notice(language: str, message: str, remaining_or_data) -> str:
+    remaining = (remaining_or_data.get("_meal_usage_remaining")
+                 if isinstance(remaining_or_data, dict) else remaining_or_data)
+    if not isinstance(remaining, int):
+        return message
+    notice = text(
+        language,
+        "usage_remaining",
+        remaining=remaining,
+        limit=DAILY_MEAL_ATTEMPT_LIMIT,
+    )
+    return f"{message}\n\n{notice}"
+
+
 def build_mealtype_screen(language: str) -> tuple[str, InlineKeyboardMarkup]:
     return text(language, "choose_meal"), InlineKeyboardMarkup([
         [InlineKeyboardButton(text(language, meal), callback_data=f"meal_type-{meal}")
@@ -148,7 +163,7 @@ async def start_proccess(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     context.user_data.pop("meal_description", None)
     context.user_data.pop("meal_type", None)
     screen, markup = build_photo_screen(language)
-    await update.callback_query.edit_message_text(screen, reply_markup=markup)
+    await update.callback_query.edit_message_text(screen, reply_markup=markup, parse_mode="HTML")
     return WAITING_PHOTO
 
 
@@ -277,7 +292,7 @@ async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["meal_description"] = description
 
     meal_text, meal_markup = build_mealtype_screen(language)
-    await update.message.reply_text(meal_text, reply_markup=meal_markup)
+    await update.message.reply_text(meal_text, reply_markup=meal_markup, parse_mode="HTML")
     return WAITING_MEAL_TYPE
 
 @meal_state_handler
@@ -320,6 +335,7 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text=analyze_step1,
         )
         stage = analyze_step1
+        usage_remaining = None
 
         async def report_retry(attempt, total):
             try:
@@ -333,10 +349,12 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not usage.allowed:
                 context.user_data["_meal_action_state"] = "awaiting_analysis"
                 await status_message.edit_text(
-                    text(language, "daily_limit_reached"),
+                    text(language, "daily_limit_reached", limit=DAILY_MEAL_ATTEMPT_LIMIT),
                     reply_markup=build_confirm_keyboard(language),
                 )
                 return WAITING_CONFIRM
+            if not usage.is_premium:
+                usage_remaining = usage.remaining
 
             recognized_meal = await recognize_meal(image_bytes, description, meal_type, on_retry=report_retry)
 
@@ -344,7 +362,7 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if recognized_meal["status"] == "not_food":
                 await status_message.edit_text(
-                    analyze_not_food,
+                    _with_usage_notice(language, analyze_not_food, usage_remaining),
                     reply_markup=keyboard
                 )
 
@@ -357,7 +375,7 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             elif recognized_meal["status"] == "too_complex":
                 await status_message.edit_text(
-                    analyze_too_complex,
+                    _with_usage_notice(language, analyze_too_complex, usage_remaining),
                     reply_markup=keyboard
                 )
 
@@ -370,7 +388,7 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             elif recognized_meal["status"] == "uncertain":
                 await status_message.edit_text(
-                    analyze_uncertain,
+                    _with_usage_notice(language, analyze_uncertain, usage_remaining),
                     reply_markup=keyboard
                 )
 
@@ -389,8 +407,13 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.info("Meal stage=selection items=%s", len(fatsecret_meal["foods"]))
 
             if meal_draft_expired(context.user_data):
-                await status_message.edit_text(text(language, "meal_expired"), reply_markup=keyboard)
+                await status_message.edit_text(_with_usage_notice(
+                    language, text(language, "meal_expired"), usage_remaining),
+                    reply_markup=keyboard)
                 return ConversationHandler.END
+
+            if usage_remaining is not None:
+                context.user_data["_meal_usage_remaining"] = usage_remaining
 
             operation_id = uuid4().hex
             remaining = context.user_data["_meal_draft_expires_at"] - monotonic()
@@ -405,30 +428,41 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.pop("meal_description", None)
             review_text, review_markup = build_final_review_screen(
                 language, fatsecret_meal["foods"], meal_type, operation_id)
-            await status_message.edit_text(review_text, reply_markup=review_markup, parse_mode="HTML")
+            await status_message.edit_text(
+                _with_usage_notice(language, review_text, context.user_data),
+                reply_markup=review_markup,
+                parse_mode="HTML",
+            )
             logger.info("Meal stage=review items=%s elapsed=%.2fs",
                         len(fatsecret_meal["foods"]), monotonic() - started)
             return WAITING_FINAL_REVIEW
 
         except UnverifiedFoodSelection:
+            message = _with_usage_notice(
+                language, text(language, "matching_uncertain"), usage_remaining)
             clear_meal_data(context.user_data)
-            await status_message.edit_text(text(language, "matching_uncertain"), reply_markup=keyboard)
+            await status_message.edit_text(message, reply_markup=keyboard)
             return ConversationHandler.END
         except GeminiTemporarilyUnavailable:
             # Both Gemini stages precede diary writes; retrying here cannot duplicate entries.
             if meal_draft_expired(context.user_data):
-                await status_message.edit_text(text(language, "meal_expired"),
+                await status_message.edit_text(_with_usage_notice(
+                                                   language, text(language, "meal_expired"),
+                                                   usage_remaining),
                                                reply_markup=keyboard)
                 return ConversationHandler.END
             context.user_data["_meal_action_state"] = "awaiting_analysis"
-            await status_message.edit_text(text(language, "service_busy"),
+            await status_message.edit_text(_with_usage_notice(
+                                               language, text(language, "service_busy"),
+                                               usage_remaining),
                                            reply_markup=build_confirm_keyboard(language))
             return WAITING_CONFIRM
         except Exception as error:
             logger.warning("Meal stage=processing failed type=%s elapsed=%.2fs",
                            type(error).__name__, monotonic() - started)
+            message = _with_usage_notice(language, error_text, usage_remaining)
             clear_meal_data(context.user_data)
-            await status_message.edit_text(error_text, reply_markup=keyboard)
+            await status_message.edit_text(message, reply_markup=keyboard)
             return ConversationHandler.END
 
     elif query.data == "confirm_btn_update":
@@ -445,6 +479,7 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=update.effective_chat.id,
             text=menu_text,
             reply_markup=markup,
+            parse_mode="HTML",
         )
 
         return WAITING_PHOTO
@@ -457,10 +492,12 @@ async def confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.pop("meal_type", None)
 
         menu_text, markup = build_main_menu(language)
+        cancelled = _with_usage_notice(
+            language, text(language, "meal_cancelled"), context.user_data)
 
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text=text(language, "meal_cancelled") + "\n\n" + menu_text,
+            text=cancelled + "\n\n" + menu_text,
             reply_markup=markup,
             parse_mode="HTML",
         )
@@ -501,7 +538,9 @@ async def final_review_screen(update: Update, context: ContextTypes.DEFAULT_TYPE
                                     operation_id, telegram_id, "expired")
         except Exception as error:
             logger.warning("Meal stage=expiry marker failed type=%s", type(error).__name__)
-        await query.edit_message_text(text(language, "meal_expired"),
+        await query.edit_message_text(_with_usage_notice(
+                                          language, text(language, "meal_expired"),
+                                          context.user_data),
                                       reply_markup=_menu_keyboard(language))
         return ConversationHandler.END
 
@@ -512,7 +551,9 @@ async def final_review_screen(update: Update, context: ContextTypes.DEFAULT_TYPE
         except Exception as error:
             logger.warning("Meal stage=cancel marker failed type=%s", type(error).__name__)
         menu_text, markup = build_main_menu(language)
-        await query.edit_message_text(text(language, "meal_cancelled") + "\n\n" + menu_text,
+        cancelled = _with_usage_notice(
+            language, text(language, "meal_cancelled"), context.user_data)
+        await query.edit_message_text(cancelled + "\n\n" + menu_text,
                                       reply_markup=markup, parse_mode="HTML")
         return ConversationHandler.END
 
@@ -522,7 +563,9 @@ async def final_review_screen(update: Update, context: ContextTypes.DEFAULT_TYPE
                                     operation_id, telegram_id, "cancelled")
         except Exception as error:
             logger.warning("Meal stage=credential marker failed type=%s", type(error).__name__)
-        await query.edit_message_text(text(language, "setup_again"),
+        await query.edit_message_text(_with_usage_notice(
+                                          language, text(language, "setup_again"),
+                                          context.user_data),
                                       reply_markup=_menu_keyboard(language))
         return ConversationHandler.END
 
@@ -533,12 +576,16 @@ async def final_review_screen(update: Update, context: ContextTypes.DEFAULT_TYPE
         claim = await asyncio.to_thread(claim_write_operation, operation_id, telegram_id)
     except Exception as error:
         logger.warning("Meal stage=write claim failed type=%s", type(error).__name__)
-        await query.edit_message_text(text(language, "write_start_failed"),
+        await query.edit_message_text(_with_usage_notice(
+                                          language, text(language, "write_start_failed"),
+                                          context.user_data),
                                       reply_markup=_menu_keyboard(language))
         return ConversationHandler.END
     if claim != "claimed":
         logger.info("Meal stage=write duplicate state=%s", claim)
-        await query.edit_message_text(text(language, "write_already_processed"),
+        await query.edit_message_text(_with_usage_notice(
+                                          language, text(language, "write_already_processed"),
+                                          context.user_data),
                                       reply_markup=_menu_keyboard(language))
         return ConversationHandler.END
 
@@ -597,6 +644,7 @@ async def final_review_screen(update: Update, context: ContextTypes.DEFAULT_TYPE
     logger.info("Meal stage=entry completed items=%s successes=%s failures=%s uncertain=%s elapsed=%.2fs",
                 len(pending), len(results["success"]), len(results["error"]),
                 len(results["uncertain"]), monotonic() - started)
+    message = _with_usage_notice(language, message, context.user_data)
     await query.edit_message_text(message + "\n\n" + text(language, "fatsecret_attribution"),
                                   reply_markup=_menu_keyboard(language), parse_mode="HTML")
     return ConversationHandler.END

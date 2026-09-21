@@ -35,7 +35,8 @@ async def start_fatsecret_auth(update, context):
         [InlineKeyboardButton(text(language, "open_fatsecret"), url=auth_data[0])],
     ])
     try:
-        await query.edit_message_text(text(language, "auth_steps"), reply_markup=keyboard)
+        await query.edit_message_text(text(language, "auth_steps"), reply_markup=keyboard,
+                                      parse_mode="HTML")
     except Exception:
         context.user_data.pop("request_token", None)
         context.user_data.pop("request_token_secret", None)
@@ -62,7 +63,7 @@ async def process_fatsecret_verifier(update, context):
     context.user_data.pop("request_token_secret", None)
     user = get_user(update.effective_user.id)
     menu_text, markup = build_main_menu(user.language)
-    await update.message.reply_text(text(language, "auth_success"))
+    await update.message.reply_text(text(language, "auth_success"), parse_mode="HTML")
     await update.message.reply_text(menu_text, reply_markup=markup, parse_mode="HTML")
     return ConversationHandler.END
 

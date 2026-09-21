@@ -25,7 +25,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             InlineKeyboardButton("Русский", callback_data="language_ru"),
             InlineKeyboardButton("English", callback_data="language_en"),
         ]])
-        await update.effective_message.reply_text(HELLO, reply_markup=keyboard)
+        await update.effective_message.reply_text(HELLO, reply_markup=keyboard, parse_mode="HTML")
         return
     if not user.fatsecret_token or not user.fatsecret_token_secret:
         setup_text, markup = build_fatsecret_connection_screen(user.language)

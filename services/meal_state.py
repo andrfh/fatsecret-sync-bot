@@ -16,7 +16,8 @@ from telegram.ext import ConversationHandler
 MEAL_DRAFT_TTL_SECONDS = 30 * 60
 MEAL_KEYS = ("meal_photo_bytes", "meal_photo_file_id", "meal_description", "meal_type",
              "_meal_draft_token", "_meal_draft_expires_at", "_meal_action_state",
-             "_meal_pending_write", "_meal_write_operation_id", "_meal_telegram_id")
+             "_meal_pending_write", "_meal_write_operation_id", "_meal_telegram_id",
+             "_meal_usage_remaining")
 _expiry_handles = {}
 _handler_locks = WeakValueDictionary()
 _active_data_ids = ContextVar('active_meal_data_ids', default=frozenset())

@@ -53,7 +53,7 @@ class MealTestSupport:
         self.user = SimpleNamespace(language='ru', fatsecret_token='test-token', fatsecret_token_secret='test-secret')
         self.enterContext(patch.object(photo, 'get_user', return_value=self.user))
         self.consume_attempt = self.enterContext(patch.object(
-            photo, 'consume_meal_attempt', return_value=UsageResult(True, False, 4)
+            photo, 'consume_meal_attempt', return_value=UsageResult(True, False, 3)
         ))
         for module in ('handlers.start', 'handlers.menu', 'handlers.settings', 'handlers.language', 'handlers.fatsecret_auth'):
             self.enterContext(patch.object(importlib.import_module(module), 'get_user', return_value=self.user))
@@ -253,6 +253,10 @@ class MealTestSupport:
                          {'food_id': 123, 'serving_id': 456, 'number_of_units': 150, 'meal': 'lunch'})
         expected = ui_text(language, 'success', meal=ui_text(language, 'lunch'))
         self.assertIn(expected, self.status.edit_text.await_args.kwargs['text'])
+        self.assertIn(
+            ui_text(language, 'usage_remaining', remaining=3, limit=4),
+            self.status.edit_text.await_args.kwargs['text'],
+        )
         self.assertEqual(self.status.edit_text.await_count, 5)
         self.assertEqual(self.bot.send_message.await_count, 1)
         self.assert_menu()
@@ -670,6 +674,31 @@ class MealRoutingTests(MealTestSupport, unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(self.bot.send_message.await_count, 1)
                 self.assertIsNone(self.state())
         self.api.interactions.create.assert_not_called()
+
+    async def test_legal_notices_have_localized_home_button(self):
+        legal = importlib.import_module('handlers.legal')
+        self.enterContext(patch.object(legal, 'get_user', return_value=self.user))
+        for language, label in (
+            ('ru', '← Вернуться на главную'),
+            ('en', '← Back to main menu'),
+        ):
+            self.user.language = language
+            for notice in (legal.privacy_notice, legal.terms_notice):
+                with self.subTest(language=language, notice=notice.__name__):
+                    self.bot.send_message.reset_mock()
+                    await notice(self.update(), self.context)
+                    markup = self.bot.send_message.await_args.kwargs['reply_markup']
+                    button = markup.inline_keyboard[0][0]
+                    self.assertEqual(button.text, label)
+                    self.assertEqual(button.callback_data, 'legal_back')
+                    await self.dispatch(callback='legal_back')
+                    result = self.bot.edit_message_text.await_args.kwargs
+                    self.assertEqual(result['text'], ui_text(
+                        language, 'menu', connection=ui_text(language, 'connected')))
+                    self.assertEqual(
+                        result['reply_markup'].inline_keyboard[0][0].callback_data,
+                        'menu_photo',
+                    )
 
     async def test_former_lower_button_labels_are_ordinary_text(self):
         for label in ('Добавить еду', 'Главное меню', 'Настройки', 'Add meal', 'Main menu', 'Settings'):

@@ -1,5 +1,11 @@
 """Short provider and privacy notices available inside Telegram."""
-from repositories.user_repository import get_user
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+from handlers.fatsecret_auth import build_fatsecret_connection_screen
+from handlers.menu import build_main_menu
+from repositories.user_repository import create_user, get_user
+from services.meal_state import clear_meal_data, close_pending_meal_write
+from ui.texts import HELLO, text
 
 
 PRIVACY = {
@@ -69,11 +75,52 @@ def _language(update):
     return user.language if user and user.language in ("ru", "en") else "ru"
 
 
+def _back_keyboard(language):
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton(text(language, "back_to_main"), callback_data="legal_back")
+    ]])
+
+
 async def privacy_notice(update, context):
+    language = _language(update)
     await update.effective_message.reply_text(
-        PRIVACY[_language(update)], parse_mode="HTML", disable_web_page_preview=True)
+        PRIVACY[language], reply_markup=_back_keyboard(language), parse_mode="HTML",
+        disable_web_page_preview=True)
 
 
 async def terms_notice(update, context):
+    language = _language(update)
     await update.effective_message.reply_text(
-        TERMS[_language(update)], parse_mode="HTML", disable_web_page_preview=True)
+        TERMS[language], reply_markup=_back_keyboard(language), parse_mode="HTML",
+        disable_web_page_preview=True)
+
+
+async def back_from_legal(update, context):
+    """Return to the correct home/onboarding screen from legal notices."""
+    query = update.callback_query
+    await query.answer()
+    telegram_id = update.effective_user.id
+    await close_pending_meal_write(context.user_data, telegram_id)
+    clear_meal_data(context.user_data)
+
+    user = get_user(telegram_id)
+    if user is None:
+        create_user(telegram_id)
+        user = get_user(telegram_id)
+    if user is None:
+        await query.edit_message_text(text("ru", "user_error"))
+        return
+
+    if user.language not in ("ru", "en"):
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("Русский", callback_data="language_ru"),
+            InlineKeyboardButton("English", callback_data="language_en"),
+        ]])
+        await query.edit_message_text(HELLO, reply_markup=keyboard, parse_mode="HTML")
+        return
+
+    if not user.fatsecret_token or not user.fatsecret_token_secret:
+        screen, markup = build_fatsecret_connection_screen(user.language)
+    else:
+        screen, markup = build_main_menu(user.language)
+    await query.edit_message_text(screen, reply_markup=markup, parse_mode="HTML")

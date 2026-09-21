@@ -22,7 +22,7 @@ async def open_settings_screen(update, context):
     await query.answer()
     user = get_user(update.effective_user.id)
     screen, markup = build_settings_menu(user.language)
-    await query.edit_message_text(screen, reply_markup=markup)
+    await query.edit_message_text(screen, reply_markup=markup, parse_mode="HTML")
 
 
 async def change_language(update, context):
@@ -33,14 +33,14 @@ async def change_language(update, context):
             InlineKeyboardButton("Русский", callback_data="settings_language_ru"),
             InlineKeyboardButton("English", callback_data="settings_language_en"),
         ]])
-        await query.edit_message_text(LANGUAGE_PROMPT, reply_markup=keyboard)
+        await query.edit_message_text(LANGUAGE_PROMPT, reply_markup=keyboard, parse_mode="HTML")
         return
     language = query.data.removeprefix("settings_language_")
     if language not in ("ru", "en"):
         return
     update_language(update.effective_user.id, language)
     screen, markup = build_settings_menu(language)
-    await query.edit_message_text(screen, reply_markup=markup)
+    await query.edit_message_text(screen, reply_markup=markup, parse_mode="HTML")
 
 
 async def disconnect_fatsecret(update, context):
@@ -52,7 +52,8 @@ async def disconnect_fatsecret(update, context):
             InlineKeyboardButton(text(language, "disconnect_yes"), callback_data="settings_disconnect_confirm"),
             InlineKeyboardButton(text(language, "disconnect_no"), callback_data="settings_disconnect_cancel"),
         ]])
-        await query.edit_message_text(text(language, "disconnect_confirm"), reply_markup=keyboard)
+        await query.edit_message_text(text(language, "disconnect_confirm"), reply_markup=keyboard,
+                                      parse_mode="HTML")
         return
     if query.data == "settings_disconnect_confirm":
         try:
@@ -67,4 +68,4 @@ async def disconnect_fatsecret(update, context):
         await query.edit_message_text(screen, reply_markup=markup, parse_mode="HTML")
     elif query.data == "settings_disconnect_cancel":
         screen, markup = build_settings_menu(language)
-        await query.edit_message_text(screen, reply_markup=markup)
+        await query.edit_message_text(screen, reply_markup=markup, parse_mode="HTML")

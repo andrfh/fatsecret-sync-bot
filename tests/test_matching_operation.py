@@ -323,7 +323,11 @@ class SDKIntegrationTests(support.MealTestSupport, unittest.IsolatedAsyncioTestC
                 if mode == 'unknown':
                     self.tool_get.assert_not_called()
                 self.oauth.post.assert_not_called()
-                self.assertEqual(self.status.edit_text.await_args.args[0], support.ui_text('ru', 'matching_uncertain'))
+                self.assertEqual(
+                    self.status.edit_text.await_args.args[0],
+                    support.ui_text('ru', 'matching_uncertain') + "\n\n" +
+                    support.ui_text('ru', 'usage_remaining', remaining=3, limit=4),
+                )
                 self.assert_clean()
 
     async def test_invalid_portions_do_not_write_through_handler(self):

@@ -27,7 +27,7 @@ class UsagePersistenceTests(unittest.TestCase):
         self.db_path = Path(self.temp_dir.name) / "usage.db"
         self.enterContext(patch.object(db_init, "DB_PATH", self.db_path))
         self.enterContext(patch.object(user_repository, "DB_PATH", self.db_path))
-        self.enterContext(patch.object(usage_service, "DAILY_MEAL_ATTEMPT_LIMIT", 5))
+        self.enterContext(patch.object(usage_service, "DAILY_MEAL_ATTEMPT_LIMIT", 4))
         db_init.init_db()
         user_repository.create_user(1)
 
@@ -35,19 +35,19 @@ class UsagePersistenceTests(unittest.TestCase):
         return usage_service.consume_meal_attempt(1, usage_date=day)
 
     def test_regular_limit_and_rejected_attempt_does_not_increment(self):
-        results = [self.consume() for _ in range(6)]
-        self.assertEqual([result.allowed for result in results], [True] * 5 + [False])
-        self.assertEqual([result.remaining for result in results], [4, 3, 2, 1, 0, 0])
+        results = [self.consume() for _ in range(5)]
+        self.assertEqual([result.allowed for result in results], [True] * 4 + [False])
+        self.assertEqual([result.remaining for result in results], [3, 2, 1, 0, 0])
         user = user_repository.get_user(1)
-        self.assertEqual(user.daily_usage_count, 5)
+        self.assertEqual(user.daily_usage_count, 4)
         self.assertEqual(user.daily_usage_date, "2026-09-15")
 
     def test_counter_resets_on_new_calendar_day(self):
-        for _ in range(5):
+        for _ in range(4):
             self.consume(date(2026, 9, 15))
         result = self.consume(date(2026, 9, 16))
         self.assertTrue(result.allowed)
-        self.assertEqual(result.remaining, 4)
+        self.assertEqual(result.remaining, 3)
         user = user_repository.get_user(1)
         self.assertEqual(user.daily_usage_count, 1)
         self.assertEqual(user.daily_usage_date, "2026-09-16")
@@ -68,8 +68,8 @@ class UsagePersistenceTests(unittest.TestCase):
     def test_concurrent_attempts_cannot_exceed_limit(self):
         with ThreadPoolExecutor(max_workers=10) as pool:
             results = list(pool.map(lambda _: self.consume(), range(20)))
-        self.assertEqual(sum(result.allowed for result in results), 5)
-        self.assertEqual(user_repository.get_user(1).daily_usage_count, 5)
+        self.assertEqual(sum(result.allowed for result in results), 4)
+        self.assertEqual(user_repository.get_user(1).daily_usage_count, 4)
 
     def test_missing_user_fails_closed(self):
         with self.assertRaises(LookupError):
@@ -125,11 +125,14 @@ class UsageFlowTests(meal_tests.MealTestSupport, unittest.IsolatedAsyncioTestCas
                 self.oauth.post.assert_not_called()
                 self.assertEqual(self.context.user_data, saved)
                 result = self.status.edit_text.await_args
-                self.assertEqual(result.args[0], meal_tests.ui_text(language, "daily_limit_reached"))
+                self.assertEqual(
+                    result.args[0],
+                    meal_tests.ui_text(language, "daily_limit_reached", limit=4),
+                )
                 self.assertEqual(result.kwargs["reply_markup"].inline_keyboard[0][0].callback_data,
                                  "confirm_btn_approve")
                 await self.confirm("cancel")
-                self.consume_attempt.return_value = usage_service.UsageResult(True, False, 4)
+                self.consume_attempt.return_value = usage_service.UsageResult(True, False, 3)
 
     async def test_photo_text_and_caption_share_the_same_quota_check(self):
         for kind in ("photo", "text", "caption"):

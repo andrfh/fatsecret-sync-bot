@@ -100,8 +100,11 @@ class TransientErrorTests(meal_tests.MealTestSupport, unittest.IsolatedAsyncioTe
         self.assertEqual(self.api.interactions.create.call_count, 3)
         self.assertEqual(self.context.user_data, saved)
         self.oauth.post.assert_not_called()
-        self.assertEqual(self.status.edit_text.await_args.args[0],
-                         meal_tests.ui_text('ru', 'service_busy'))
+        self.assertEqual(
+            self.status.edit_text.await_args.args[0],
+            meal_tests.ui_text('ru', 'service_busy') + "\n\n" +
+            meal_tests.ui_text('ru', 'usage_remaining', remaining=3, limit=4),
+        )
 
     async def test_exhaustion_preserves_draft_and_manual_retry_works(self):
         for language in ('ru', 'en'):
@@ -127,7 +130,12 @@ class TransientErrorTests(meal_tests.MealTestSupport, unittest.IsolatedAsyncioTe
                         self.oauth.post.assert_not_called()
                         self.assertEqual(self.bot.send_message.await_count, 1)
                         final = self.status.edit_text.await_args
-                        self.assertEqual(final.args[0], meal_tests.ui_text(language, 'service_busy'))
+                        self.assertEqual(
+                            final.args[0],
+                            meal_tests.ui_text(language, 'service_busy') + "\n\n" +
+                            meal_tests.ui_text(
+                                language, 'usage_remaining', remaining=3, limit=4),
+                        )
                         self.assertEqual(final.kwargs['reply_markup'].inline_keyboard[0][0].callback_data,
                                          'confirm_btn_approve')
                         operation.side_effect = None

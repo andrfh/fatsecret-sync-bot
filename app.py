@@ -17,9 +17,10 @@ from telegram.ext import (
 
 from database.init_db import init_db
 from repositories.write_operation_repository import cleanup_write_operations
+from version import __version__
 
 from handlers.start import start
-from handlers.legal import privacy_notice, terms_notice
+from handlers.legal import back_from_legal, privacy_notice, terms_notice
 from handlers.language import select_language
 from handlers.fatsecret_auth import (
     start_fatsecret_auth,
@@ -159,6 +160,8 @@ async def handle_error(update, context):
 
 
 def main() -> None:
+    logging.getLogger("services.application").info(
+        "Starting fatsecret-sync-bot version=%s", __version__)
     init_db()
     cleanup_write_operations()
 
@@ -168,6 +171,7 @@ def main() -> None:
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("privacy", privacy_notice))
     app.add_handler(CommandHandler("terms", terms_notice))
+    app.add_handler(CallbackQueryHandler(back_from_legal, pattern=r"^legal_back$"))
     app.add_handler(
         CallbackQueryHandler(
             select_language,
