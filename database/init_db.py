@@ -33,3 +33,23 @@ def init_db() -> None:
             if column not in existing_columns:
                 cursor.execute(statement)
 
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS meal_write_operations (
+                operation_id TEXT PRIMARY KEY,
+                telegram_id INTEGER NOT NULL,
+                state TEXT NOT NULL,
+                outcome TEXT,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_meal_write_operations_user
+            ON meal_write_operations (telegram_id, state)
+            """
+        )
+

@@ -74,3 +74,9 @@ venv.bak/
 
 users_photos/
 data/
+
+# Local SQLite databases, journals and backups outside data/
+*.db
+*.db-*
+*.db.*
+*.sqlite*

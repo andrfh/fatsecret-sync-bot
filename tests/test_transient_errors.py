@@ -31,13 +31,23 @@ class TransientErrorTests(meal_tests.MealTestSupport, unittest.IsolatedAsyncioTe
                 with self.subTest(stage=stage, code=code):
                     self.consume_attempt.reset_mock()
                     self.api.reset_mock(side_effect=True)
+                    self.restore_generate_content()
                     self.api.interactions.create.return_value = SimpleNamespace(output_text=json.dumps(meal_tests.MEAL))
                     self.api.models.generate_content.return_value = SimpleNamespace(text=json.dumps(meal_tests.FOODS))
                     self.set_entry_results(['success'])
                     self.oauth.post.reset_mock()
                     self.sleep.reset_mock()
                     operation = self.api.interactions.create if stage == 'recognition' else self.api.models.generate_content
-                    operation.side_effect = [api_error(code), api_error(code), operation.return_value]
+                    if stage == 'search':
+                        failures = iter((api_error(code), api_error(code)))
+                        def transient_search(*args, **kwargs):
+                            try:
+                                raise next(failures)
+                            except StopIteration:
+                                return self.simulate_generate_content(*args, **kwargs)
+                        operation.side_effect = transient_search
+                    else:
+                        operation.side_effect = [api_error(code), api_error(code), operation.return_value]
                     await self.accept('text')
                     self.assertEqual(await self.confirm(), ConversationHandler.END)
                     self.assertEqual(operation.call_count, 3)
@@ -52,6 +62,7 @@ class TransientErrorTests(meal_tests.MealTestSupport, unittest.IsolatedAsyncioTe
         for stage in ('recognition', 'search'):
             with self.subTest(stage=stage):
                 self.api.reset_mock(side_effect=True)
+                self.restore_generate_content()
                 recognition = SimpleNamespace(output_text=json.dumps(meal_tests.MEAL))
                 search = SimpleNamespace(text=json.dumps(meal_tests.FOODS))
                 self.api.interactions.create.return_value = recognition
@@ -60,10 +71,18 @@ class TransientErrorTests(meal_tests.MealTestSupport, unittest.IsolatedAsyncioTe
                 self.oauth.post.reset_mock()
                 self.sleep.reset_mock()
                 operation = self.api.interactions.create if stage == 'recognition' else self.api.models.generate_content
-                operation.side_effect = [
-                    ssl.SSLEOFError(8, 'EOF occurred in violation of protocol'),
-                    recognition if stage == 'recognition' else search,
-                ]
+                if stage == 'search':
+                    first = True
+                    def ssl_search(*args, **kwargs):
+                        nonlocal first
+                        if first:
+                            first = False
+                            raise ssl.SSLEOFError(8, 'EOF occurred in violation of protocol')
+                        return self.simulate_generate_content(*args, **kwargs)
+                    operation.side_effect = ssl_search
+                else:
+                    operation.side_effect = [
+                        ssl.SSLEOFError(8, 'EOF occurred in violation of protocol'), recognition]
                 await self.accept('text')
                 self.assertEqual(await self.confirm(), ConversationHandler.END)
                 self.assertEqual(operation.call_count, 2)
@@ -91,6 +110,7 @@ class TransientErrorTests(meal_tests.MealTestSupport, unittest.IsolatedAsyncioTe
                 for kind in ('photo', 'text', 'caption'):
                     with self.subTest(language=language, stage=stage, kind=kind):
                         self.api.reset_mock(side_effect=True)
+                        self.restore_generate_content()
                         self.api.interactions.create.return_value = SimpleNamespace(output_text=json.dumps(meal_tests.MEAL))
                         self.api.models.generate_content.return_value = SimpleNamespace(text=json.dumps(meal_tests.FOODS))
                         self.oauth.post.reset_mock()
@@ -111,6 +131,8 @@ class TransientErrorTests(meal_tests.MealTestSupport, unittest.IsolatedAsyncioTe
                         self.assertEqual(final.kwargs['reply_markup'].inline_keyboard[0][0].callback_data,
                                          'confirm_btn_approve')
                         operation.side_effect = None
+                        if stage == 'search':
+                            self.restore_generate_content()
                         self.assertEqual(await self.confirm(), ConversationHandler.END)
                         self.oauth.post.assert_called_once()
                         self.assert_clean()
@@ -175,6 +197,9 @@ class TransientRoutingTests(meal_tests.MealTestSupport, unittest.IsolatedAsyncio
         self.bot.answer_callback_query.side_effect = None
         self.bot.delete_message.side_effect = None
         await self.dispatch(callback='confirm_btn_approve')
+        operation_id = self.context.user_data['_meal_write_operation_id']
+        self.assertEqual(self.state(), meal_tests.photo.WAITING_FINAL_REVIEW)
+        await self.dispatch(callback=f'meal_write:{operation_id}')
         self.assertIsNone(self.state())
         self.oauth.post.assert_called_once()
         self.assertEqual(self.oauth.post.call_args.kwargs['data']['meal'], 'dinner')
@@ -192,7 +217,12 @@ class TransientRoutingTests(meal_tests.MealTestSupport, unittest.IsolatedAsyncio
                 self.assertEqual(self.state(), meal_tests.photo.WAITING_CONFIRM)
                 self.oauth.post.assert_not_called()
                 self.api.models.generate_content.side_effect = None
+                self.restore_generate_content()
                 await self.dispatch(callback=f'confirm_btn_{action}')
+                if action == 'approve':
+                    operation_id = self.context.user_data['_meal_write_operation_id']
+                    self.assertEqual(self.state(), meal_tests.photo.WAITING_FINAL_REVIEW)
+                    await self.dispatch(callback=f'meal_write:{operation_id}')
                 self.assertIsNone(self.state())
                 self.assert_clean()
                 self.assertEqual(self.oauth.post.call_count, 1 if action == 'approve' else 0)

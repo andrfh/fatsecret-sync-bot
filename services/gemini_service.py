@@ -12,6 +12,8 @@ from google.genai.errors import APIError
 
 from clients.gemini_client import gemini_search_food
 from clients.gemini_client import recognize_image
+from clients.gemini_client import new_matching_operation
+from services.matching_operation import UnverifiedFoodSelection, MatchingBudgetExceeded
 
 
 logger = logging.getLogger(__name__)
@@ -19,6 +21,10 @@ logger = logging.getLogger(__name__)
 
 class GeminiTemporarilyUnavailable(Exception):
     """The read-only Gemini operation could not finish within the retry budget."""
+
+
+class TransientMatchingRead(Exception):
+    """Safe marker for a failed read; diary writes have not started."""
 
 
 _TRANSIENT_NETWORK_ERRORS = (
@@ -32,6 +38,8 @@ _TRANSIENT_NETWORK_ERRORS = (
 
 
 def _is_transient_gemini_error(error: Exception) -> bool:
+    if isinstance(error, TransientMatchingRead):
+        return True
     current = error
     visited = set()
     while current is not None and id(current) not in visited:
@@ -172,43 +180,27 @@ async def recognize_meal(
 
 
 async def search_food(recognized_meal: dict, language: str, *, on_retry=None) -> dict:
-    allowed_resolutions = {"components", "whole_meal"}
+    operation = new_matching_operation()
 
-    ai_response = await _request_with_retry(
-        gemini_search_food,
-        recognized_meal,
-        language,
-        on_retry=on_retry,
-    )
+    def match():
+        ai_response = gemini_search_food(recognized_meal, language, operation)
+        try:
+            food_data = _parse_json_object(ai_response, "food resolution")
+            return operation.resolve(food_data, recognized_meal)
+        except MatchingBudgetExceeded:
+            raise
+        except (ValueError, KeyError):
+            if operation.budget_exhausted:
+                raise MatchingBudgetExceeded('Matching read budget exhausted') from None
+            if operation.has_transient_error:
+                raise TransientMatchingRead() from None
+            raise UnverifiedFoodSelection('Could not verify food selection') from None
 
-    food_data = _parse_json_object(ai_response, "food resolution")
-    resolution = food_data.get("resolution")
-
-    if resolution not in allowed_resolutions:
-        raise ValueError("AI returned an unsupported food resolution")
-
-    foods = food_data.get("foods")
-
-    if not isinstance(foods, list) or not foods:
-        raise ValueError("AI returned an invalid foods list")
-
-    if resolution == "whole_meal" and len(foods) != 1:
-        raise ValueError("AI returned multiple foods for a whole meal")
-
-    for food in foods:
-        if not isinstance(food, dict):
-            raise ValueError("AI returned an invalid food")
-
-        if not _is_non_empty_string(food.get("food_name")):
-            raise ValueError("AI returned an invalid food name")
-
-        if not _is_positive_id(food.get("food_id")):
-            raise ValueError("AI returned an invalid food ID")
-
-        if not _is_positive_id(food.get("serving_id")):
-            raise ValueError("AI returned an invalid serving ID")
-
-        if not _is_positive_number(food.get("number_of_units")):
-            raise ValueError("AI returned an invalid number of units")
-
-    return food_data
+    try:
+        return await _request_with_retry(match, on_retry=on_retry)
+    finally:
+        logger.info(
+            "Matching completed gemini_calls=%s fatsecret_calls=%s tool_calls=%s retries=%s cache_hits=%s",
+            operation.gemini_calls, operation.fatsecret_calls, operation.tool_calls,
+            operation.retries, operation.cache_hits,
+        )

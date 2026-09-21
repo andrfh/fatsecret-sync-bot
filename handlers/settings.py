@@ -1,7 +1,10 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+import logging
 from repositories.user_repository import get_user, update_language, remove_fatsecret_tokens
 from handlers.fatsecret_auth import build_fatsecret_connection_screen
 from ui.texts import LANGUAGE_PROMPT, text
+
+logger = logging.getLogger(__name__)
 
 
 def build_settings_menu(language: str):
@@ -55,13 +58,13 @@ async def disconnect_fatsecret(update, context):
         try:
             remove_fatsecret_tokens(update.effective_user.id)
         except Exception as error:
-            print(f"FatSecret disconnect failed: {type(error).__name__}")
+            logger.warning("FatSecret disconnect failed type=%s", type(error).__name__)
             await query.edit_message_text(text(language, "disconnect_error"),
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(
                     text(language, "menu_button"), callback_data="menu_back")]]))
             return
         screen, markup = build_fatsecret_connection_screen(language)
-        await query.edit_message_text(screen, reply_markup=markup)
+        await query.edit_message_text(screen, reply_markup=markup, parse_mode="HTML")
     elif query.data == "settings_disconnect_cancel":
         screen, markup = build_settings_menu(language)
         await query.edit_message_text(screen, reply_markup=markup)

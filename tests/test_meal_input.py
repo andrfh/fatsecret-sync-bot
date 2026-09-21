@@ -60,16 +60,75 @@ class MealTestSupport:
         self.bot = AsyncMock(spec=ExtBot)
         self.status = SimpleNamespace(edit_text=AsyncMock())
         self.bot.send_message.return_value = self.status
+        # Telegram callback edits and status-message edits target the same
+        # synthetic message in these flow tests.
+        self.bot.edit_message_text = self.status.edit_text
         self.file = SimpleNamespace(download_to_memory=AsyncMock(side_effect=lambda buffer: buffer.write(PHOTO_BYTES)))
         self.bot.get_file.return_value = self.file
         self.context = SimpleNamespace(bot=self.bot, user_data={'unrelated': 'keep'})
+        self.addCleanup(lambda: photo.clear_meal_data(self.context.user_data))
         self.api = Mock()
         self.api.interactions.create.return_value = SimpleNamespace(output_text=json.dumps(MEAL))
         self.api.models.generate_content.return_value = SimpleNamespace(text=json.dumps(FOODS))
+        self.tool_search = self.enterContext(patch.object(
+            gemini_client, 'fatsecret_food_search', side_effect=self.synthetic_food_search))
+        self.tool_get = self.enterContext(patch.object(
+            gemini_client, 'fatsecret_get_food', side_effect=self.synthetic_food_get))
+        self.api.models.generate_content.side_effect = self.simulate_generate_content
         self.enterContext(patch.object(gemini_client, 'client', self.api))
+        self.create_write = self.enterContext(patch.object(photo, 'create_write_operation'))
+        self.claim_write = self.enterContext(patch.object(
+            photo, 'claim_write_operation', return_value='claimed'))
+        self.finish_write = self.enterContext(patch.object(
+            photo, 'finish_write_operation', return_value=True))
+        self.close_write = self.enterContext(patch.object(
+            photo, 'close_pending_write_operation', return_value=True))
         self.oauth = Mock()
         self.enterContext(patch.object(fatsecret_client, 'OAuth1Session', return_value=self.oauth))
         self.set_entry_results(['success'])
+
+    def selected_foods(self):
+        try:
+            data = json.loads(self.api.models.generate_content.return_value.text)
+        except (AttributeError, TypeError, json.JSONDecodeError):
+            return []
+        return data.get('foods', []) if isinstance(data, dict) else []
+
+    def synthetic_food_search(self, query):
+        items = [{'food_id': str(food.get('food_id')), 'food_name': food.get('food_name', 'Synthetic'),
+                  'food_type': 'Generic'}
+                 for food in self.selected_foods() if str(food.get('food_id', '')).isdigit()]
+        return {'foods': {'food': items, 'total_results': str(len(items))}}
+
+    def synthetic_food_get(self, food_id):
+        selected = next((food for food in self.selected_foods()
+                         if str(food.get('food_id')) == str(food_id)), {})
+        serving_id = selected.get('serving_id')
+        servings = [] if serving_id is None else [{'serving_id': str(serving_id),
+            'serving_description': '100 g', 'number_of_units': '100', 'measurement_description': 'g',
+            'metric_serving_amount': '100', 'metric_serving_unit': 'g',
+            'calories': '130', 'protein': '3', 'fat': '1', 'carbohydrate': '28'}]
+        return {'food': {'food_id': str(food_id), 'food_name': selected.get('food_name', 'Rice'),
+                         'food_type': 'Generic',
+                         'servings': {'serving': servings}}}
+
+    def simulate_generate_content(self, *args, **kwargs):
+        search_tool, get_tool = kwargs['config'].tools
+        result = search_tool('synthetic query')
+        selected = self.selected_foods()
+        choices = []
+        for index, card in enumerate(result.get('candidates', [])):
+            detail = get_tool(card['candidate_ref'])
+            portions = detail.get('servings', [])
+            choices.append(dict(candidate_ref=card['candidate_ref'],
+                serving_ref=portions[0]['serving_ref'] if portions else 'unknown-serving',
+                food_name=selected[index]['food_name'], item_indices=[index],
+                amount_g=selected[index]['number_of_units']))
+        spec = json.loads(self.api.models.generate_content.return_value.text)
+        return SimpleNamespace(text=json.dumps(dict(status='ok', resolution=spec.get('resolution'), foods=choices)))
+
+    def restore_generate_content(self):
+        self.api.models.generate_content.side_effect = self.simulate_generate_content
 
     def set_entry_results(self, statuses):
         responses = []
@@ -129,11 +188,27 @@ class MealTestSupport:
         await self.choose()
         return update
 
-    async def confirm(self, action='approve'):
+    async def analyze(self, action='approve'):
         update = self.update(callback=f'confirm_btn_{action}')
         handler = next(h for h in app.photo_process_conv.states[photo.WAITING_CONFIRM] if h.callback is photo.confirm_screen)
         self.assertTrue(handler.check_update(update))
         return await handler.callback(update, self.context)
+
+    async def final_confirm(self, action='write'):
+        operation_id = self.context.user_data['_meal_write_operation_id']
+        callback = (f'meal_write_cancel:{operation_id}' if action == 'cancel'
+                    else f'meal_write:{operation_id}')
+        update = self.update(callback=callback)
+        handler = next(h for h in app.photo_process_conv.states[photo.WAITING_FINAL_REVIEW]
+                       if h.callback is photo.final_review_screen)
+        self.assertTrue(handler.check_update(update))
+        return await handler.callback(update, self.context)
+
+    async def confirm(self, action='approve'):
+        result = await self.analyze(action)
+        if action == 'approve' and result == photo.WAITING_FINAL_REVIEW:
+            return await self.final_confirm()
+        return result
 
     def assert_menu(self):
         markup = self.status.edit_text.await_args.kwargs['reply_markup']
@@ -177,8 +252,8 @@ class MealTestSupport:
         self.assertEqual({k: data[k] for k in ('food_id', 'serving_id', 'number_of_units', 'meal')},
                          {'food_id': 123, 'serving_id': 456, 'number_of_units': 150, 'meal': 'lunch'})
         expected = ui_text(language, 'success', meal=ui_text(language, 'lunch'))
-        self.assertEqual(self.status.edit_text.await_args.args, (expected,))
-        self.assertEqual(self.status.edit_text.await_count, 3)
+        self.assertIn(expected, self.status.edit_text.await_args.kwargs['text'])
+        self.assertEqual(self.status.edit_text.await_count, 5)
         self.assertEqual(self.bot.send_message.await_count, 1)
         self.assert_menu()
         self.assert_clean()
@@ -231,29 +306,22 @@ class MealInputTests(MealTestSupport, unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('meal_photo_bytes', self.context.user_data)
         self.bot.send_photo.assert_not_awaited()
 
-    async def test_retry_for_each_input_and_language(self):
+    async def test_permanent_error_clears_each_input_and_allows_new_operation(self):
         for language in ('ru', 'en'):
             self.user.language = language
             for kind in ('photo', 'text', 'caption'):
                 with self.subTest(language=language, kind=kind):
                     await self.start()
                     await self.accept(kind)
-                    saved = self.context.user_data.copy()
                     self.bot.send_photo.reset_mock()
                     self.bot.send_message.reset_mock()
                     self.api.interactions.create.side_effect = RuntimeError('Offline Gemini failure')
-                    self.assertEqual(await self.confirm(), photo.WAITING_CONFIRM)
-                    self.assertEqual(self.context.user_data, saved)
-                    if kind == 'text':
-                        self.bot.send_photo.assert_not_awaited()
-                        confirmation = self.bot.send_message.await_args_list[-1].kwargs
-                        self.assertIn('150 g rice', confirmation['text'])
-                    else:
-                        self.bot.send_photo.assert_awaited_once()
-                        confirmation = self.bot.send_photo.await_args.kwargs
-                        self.assertEqual(confirmation['photo'].getvalue(), PHOTO_BYTES)
-                    self.assertIn('reply_markup', confirmation)
+                    self.assertEqual(await self.confirm(), ConversationHandler.END)
+                    self.assert_clean()
+                    self.assert_menu()
+                    self.bot.send_photo.assert_not_awaited()
                     self.api.interactions.create.side_effect = None
+                    await self.accept(kind)
                     self.set_entry_results(['success'])
                     self.assertEqual(await self.confirm(), ConversationHandler.END)
                     self.assert_clean()
@@ -293,6 +361,9 @@ class MealInputTests(MealTestSupport, unittest.IsolatedAsyncioTestCase):
                         foods = copy.deepcopy(FOODS)
                         foods['resolution'] = 'components'
                         foods['foods'].append(dict(foods['foods'][0], food_id=789))
+                        meal = copy.deepcopy(MEAL)
+                        meal['items'].append({'name': 'second rice', 'brand': None, 'amount_g': 150})
+                        self.api.interactions.create.return_value.output_text = json.dumps(meal)
                         self.api.models.generate_content.return_value.text = json.dumps(foods)
                         self.set_entry_results(statuses)
                         await self.start()
@@ -302,11 +373,14 @@ class MealInputTests(MealTestSupport, unittest.IsolatedAsyncioTestCase):
                         self.oauth.post.reset_mock()
                         self.assertEqual(await self.confirm(), ConversationHandler.END)
                         self.assertEqual(self.oauth.post.call_count, 2)
-                        partial = 'success' in statuses
-                        expected = (ui_text(language, 'partial_error', success=1, total=2) if partial
-                                    else ui_text(language, 'entry_error'))
-                        self.assertEqual(self.status.edit_text.await_args.args, (expected,))
-                        self.assertEqual(self.status.edit_text.await_count, 3)
+                        result_text = self.status.edit_text.await_args.kwargs['text']
+                        if 'success' in statuses:
+                            self.assertIn(ui_text(language, 'write_partial_header'), result_text)
+                            self.assertIn(ui_text(language, 'write_succeeded', foods='').split('\n')[0], result_text)
+                            self.assertIn(ui_text(language, 'write_failed', foods='').split('\n')[0], result_text)
+                        else:
+                            self.assertIn(ui_text(language, 'write_all_failed', foods='').split('\n')[0], result_text)
+                        self.assertEqual(self.status.edit_text.await_count, 4)
                         self.assertEqual(self.bot.send_message.await_count, 1)
                         self.assert_menu()
                         self.assert_clean()
@@ -340,22 +414,23 @@ class MealInputTests(MealTestSupport, unittest.IsolatedAsyncioTestCase):
             await gemini_service.recognize_meal(None, ' \n ', 'lunch')
         self.api.interactions.create.assert_not_called()
 
-    async def test_invalid_recognition_response_restores_text_confirmation(self):
+    async def test_invalid_recognition_response_clears_draft(self):
         for response in ('not JSON', json.dumps({'status': 'invalid'}), json.dumps(dict(MEAL, items=[]))):
             with self.subTest(response=response):
                 await self.start()
                 await self.accept('text')
                 self.api.interactions.create.return_value.output_text = response
-                self.assertEqual(await self.confirm(), photo.WAITING_CONFIRM)
-                self.assertEqual(self.context.user_data['meal_description'], '150 g rice')
+                self.assertEqual(await self.confirm(), ConversationHandler.END)
+                self.assert_clean()
         self.api.models.generate_content.assert_not_called()
         self.oauth.post.assert_not_called()
 
-    async def test_invalid_food_resolution_restores_text_confirmation(self):
+    async def test_invalid_food_resolution_clears_draft(self):
         await self.start()
         await self.accept('text')
         self.api.models.generate_content.return_value.text = json.dumps({'resolution': 'components', 'foods': []})
-        self.assertEqual(await self.confirm(), photo.WAITING_CONFIRM)
+        self.assertEqual(await self.confirm(), ConversationHandler.END)
+        self.assert_clean()
         self.bot.send_photo.assert_not_awaited()
         self.oauth.post.assert_not_called()
 
@@ -384,7 +459,8 @@ class MealRoutingTests(MealTestSupport, unittest.IsolatedAsyncioTestCase):
                     name=original.name,
                 )
             self.enterContext(patch.object(app, name, conversation))
-        with patch.object(app, 'init_db'), patch.object(Application, 'builder') as builder, \
+        with patch.object(app, 'init_db'), patch.object(app, 'cleanup_write_operations'), \
+                patch.object(Application, 'builder') as builder, \
                 patch.object(Application, 'run_polling'):
             builder.return_value.token.return_value.build.return_value = self.application
             app.main()
@@ -441,6 +517,10 @@ class MealRoutingTests(MealTestSupport, unittest.IsolatedAsyncioTestCase):
                 self.oauth.post.assert_not_called()
                 self.bot.send_message.reset_mock()
                 await self.dispatch(callback='confirm_btn_approve')
+                self.assertEqual(self.state(), photo.WAITING_FINAL_REVIEW)
+                operation_id = self.context.user_data['_meal_write_operation_id']
+                self.oauth.post.assert_not_called()
+                await self.dispatch(callback=f'meal_write:{operation_id}')
                 self.assertIsNone(self.state())
                 self.assertEqual(self.oauth.post.call_args.kwargs['data']['meal'], 'dinner')
                 parts = self.api.interactions.create.call_args.kwargs['input']
@@ -471,7 +551,7 @@ class MealRoutingTests(MealTestSupport, unittest.IsolatedAsyncioTestCase):
     async def test_button_caption(self):
         await self.routed_flow('caption', True)
 
-    async def test_all_meal_types_in_confirmation_retry_and_entry(self):
+    async def test_all_meal_types_in_confirmation_new_attempt_and_entry(self):
         names = {
             'ru': {'breakfast': 'Завтрак', 'lunch': 'Обед', 'dinner': 'Ужин', 'other': 'Перекус'},
             'en': {'breakfast': 'Breakfast', 'lunch': 'Lunch', 'dinner': 'Dinner', 'other': 'Snack'},
@@ -484,15 +564,18 @@ class MealRoutingTests(MealTestSupport, unittest.IsolatedAsyncioTestCase):
                     await self.dispatch(callback=f'meal_type-{meal}')
                     self.assertIn(label, self.bot.send_message.await_args.kwargs['text'])
                     self.api.interactions.create.side_effect = RuntimeError('Offline failure')
-                    saved = self.context.user_data.copy()
                     self.bot.send_message.reset_mock()
                     await self.dispatch(callback='confirm_btn_approve')
-                    self.assertEqual(self.state(), photo.WAITING_CONFIRM)
-                    self.assertEqual(self.context.user_data, saved)
-                    self.assertIn(label, self.bot.send_message.await_args_list[-1].kwargs['text'])
+                    self.assertIsNone(self.state())
+                    self.assert_clean()
                     self.api.interactions.create.side_effect = None
+                    await self.dispatch()
+                    await self.dispatch(callback=f'meal_type-{meal}')
                     self.set_entry_results(['success'])
                     await self.dispatch(callback='confirm_btn_approve')
+                    operation_id = self.context.user_data['_meal_write_operation_id']
+                    self.assertEqual(self.state(), photo.WAITING_FINAL_REVIEW)
+                    await self.dispatch(callback=f'meal_write:{operation_id}')
                     self.assertEqual(self.oauth.post.call_args.kwargs['data']['meal'], meal)
                     self.assertIsNone(self.state())
                     self.assert_clean()
@@ -525,6 +608,8 @@ class MealRoutingTests(MealTestSupport, unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(self.context.user_data['meal_photo_bytes'])
         await self.dispatch(callback='meal_type-other')
         await self.dispatch(callback='confirm_btn_approve')
+        operation_id = self.context.user_data['_meal_write_operation_id']
+        await self.dispatch(callback=f'meal_write:{operation_id}')
         self.assertEqual(self.oauth.post.call_args.kwargs['data']['meal'], 'other')
         self.assert_clean()
 

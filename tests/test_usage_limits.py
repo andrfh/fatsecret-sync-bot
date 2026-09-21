@@ -136,6 +136,7 @@ class UsageFlowTests(meal_tests.MealTestSupport, unittest.IsolatedAsyncioTestCas
             with self.subTest(kind=kind):
                 self.consume_attempt.reset_mock()
                 self.api.reset_mock(side_effect=True)
+                self.restore_generate_content()
                 self.api.interactions.create.return_value = SimpleNamespace(
                     output_text=json.dumps(meal_tests.MEAL)
                 )
@@ -152,6 +153,7 @@ class UsageFlowTests(meal_tests.MealTestSupport, unittest.IsolatedAsyncioTestCas
             with self.subTest(outcome=outcome):
                 self.consume_attempt.reset_mock()
                 self.api.reset_mock(side_effect=True)
+                self.restore_generate_content()
                 self.oauth.post.reset_mock()
                 await self.accept("text")
                 if outcome == "not_food":
@@ -169,29 +171,30 @@ class UsageFlowTests(meal_tests.MealTestSupport, unittest.IsolatedAsyncioTestCas
                 self.assertEqual(await self.confirm(), ConversationHandler.END)
                 self.consume_attempt.assert_called_once_with(1)
 
-    async def test_failed_processing_still_consumes_attempt_and_manual_retry_consumes_another(self):
+    async def test_failed_processing_consumes_attempt_and_new_operation_consumes_another(self):
         await self.accept("text")
         self.api.interactions.create.side_effect = [
             RuntimeError("AI failure"),
             SimpleNamespace(output_text=json.dumps(meal_tests.MEAL)),
         ]
-        self.assertEqual(await self.confirm(), meal_tests.photo.WAITING_CONFIRM)
+        self.assertEqual(await self.confirm(), ConversationHandler.END)
+        self.assert_clean()
         self.assertEqual(self.consume_attempt.call_count, 1)
+        await self.accept("text")
         self.assertEqual(await self.confirm(), ConversationHandler.END)
         self.assertEqual(self.consume_attempt.call_count, 2)
         self.oauth.post.assert_called_once()
 
     async def test_quota_storage_failure_does_not_call_external_services(self):
         await self.accept("caption")
-        saved = self.context.user_data.copy()
         self.api.reset_mock()
         self.oauth.post.reset_mock()
         self.consume_attempt.side_effect = sqlite3.OperationalError("database unavailable")
-        self.assertEqual(await self.confirm(), meal_tests.photo.WAITING_CONFIRM)
+        self.assertEqual(await self.confirm(), ConversationHandler.END)
         self.api.interactions.create.assert_not_called()
         self.api.models.generate_content.assert_not_called()
         self.oauth.post.assert_not_called()
-        self.assertEqual(self.context.user_data, saved)
+        self.assert_clean()
 
 
 if __name__ == "__main__":

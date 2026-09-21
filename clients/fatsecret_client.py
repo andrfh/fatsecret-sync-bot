@@ -19,6 +19,14 @@ FOOD_GET_URL = "https://platform.fatsecret.com/rest/food/v5"
 
 FOOD_ENTRIES_URL = "https://platform.fatsecret.com/rest/food-entries/v1"
 
+class FatSecretAPIError(RuntimeError):
+    """Provider failure without retaining its potentially sensitive message."""
+
+    def __init__(self, code):
+        self.code = int(code) if str(code).isascii() and str(code).isdigit() else None
+        super().__init__("FatSecret API request failed")
+
+
 def _parse_fatsecret_response(response) -> dict:
     response.raise_for_status()
 
@@ -26,17 +34,14 @@ def _parse_fatsecret_response(response) -> dict:
 
     if "error" in data:
         error_data = data["error"]
-        raise RuntimeError(
-            f"FatSecret API error {error_data.get('code')}: "
-            f"{error_data.get('message')}"
-        )
+        raise FatSecretAPIError(error_data.get('code'))
 
     return data
 
 def create_authorization(consumer_key: str, consumer_secret: str) -> tuple[str, str, str]:
     oauth = OAuth1Session(consumer_key, client_secret=consumer_secret, callback_uri="oob", signature_method=SIGNATURE_HMAC, signature_type=SIGNATURE_TYPE_BODY)
 
-    tokens = oauth.fetch_request_token(REQUEST_TOKEN_URL)
+    tokens = oauth.fetch_request_token(REQUEST_TOKEN_URL, timeout=30)
 
     request_token = tokens["oauth_token"]
     request_token_secret = tokens["oauth_token_secret"]
@@ -56,7 +61,7 @@ def exchange_verifier(consumer_key: str, consumer_secret: str, request_token: st
         signature_type=SIGNATURE_TYPE_QUERY,
     )
 
-    response = oauth.get(ACCESS_TOKEN_URL)
+    response = oauth.get(ACCESS_TOKEN_URL, timeout=30)
     response.raise_for_status()
 
     data = parse_qs(response.text)
@@ -81,6 +86,7 @@ def food_search(query: str, consumer_key: str, consumer_secret: str) -> dict:
             "format": "json",
             "max_results": 10,
         },
+        timeout=30,
     )
 
     return _parse_fatsecret_response(response)
@@ -99,6 +105,7 @@ def get_food(food_id: int, consumer_key: str, consumer_secret: str) -> dict:
             "food_id": food_id,
             "format": "json",
         },
+        timeout=30,
     )
 
     return _parse_fatsecret_response(response)
@@ -138,6 +145,7 @@ def create_food_entry(
             "date": date,
             "format": "json",
         },
+        timeout=30,
     )
 
     return _parse_fatsecret_response(response)

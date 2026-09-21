@@ -19,4 +19,4 @@ async def select_language(update, context):
         screen, markup = build_fatsecret_connection_screen(user.language)
     else:
         screen, markup = build_main_menu(user.language)
-    await query.edit_message_text(screen, reply_markup=markup)
+    await query.edit_message_text(screen, reply_markup=markup, parse_mode="HTML")

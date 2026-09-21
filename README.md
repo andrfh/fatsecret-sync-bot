@@ -1,5 +1,13 @@
 # Technical Architecture
 
+> **Public-launch compliance blocker:** the published fatsecret Platform API terms do not explicitly
+> authorize sending even minimized fatsecret content to an independent AI processor. Obtain written
+> confirmation from fatsecret for the exact Gemini matching design before opening the bot to public
+> traffic. This repository does not treat the current integration as proof of permission.
+
+User-facing data handling and notices are documented in [PRIVACY.md](PRIVACY.md) and
+[TERMS.md](TERMS.md).
+
 ## 1. System Overview
 
 The service is a Telegram bot that recognizes food from a photo, estimates calories and macros, and saves the confirmed meal to FatSecret.

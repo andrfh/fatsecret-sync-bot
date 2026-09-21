@@ -4,9 +4,12 @@ from repositories.user_repository import create_user, get_user
 from handlers.menu import build_main_menu
 from handlers.fatsecret_auth import build_fatsecret_connection_screen
 from ui.texts import HELLO, text
+from services.meal_state import clear_meal_data, close_pending_meal_write
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await close_pending_meal_write(context.user_data, update.effective_user.id)
+    clear_meal_data(context.user_data)
     if update.callback_query:
         await update.callback_query.answer()
     telegram_id = update.effective_user.id
@@ -26,7 +29,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     if not user.fatsecret_token or not user.fatsecret_token_secret:
         setup_text, markup = build_fatsecret_connection_screen(user.language)
-        await update.effective_message.reply_text(setup_text, reply_markup=markup)
+        await update.effective_message.reply_text(setup_text, reply_markup=markup, parse_mode="HTML")
         return
     menu_text, markup = build_main_menu(user.language)
-    await update.effective_message.reply_text(menu_text, reply_markup=markup)
+    await update.effective_message.reply_text(menu_text, reply_markup=markup, parse_mode="HTML")
